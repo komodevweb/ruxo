@@ -1,0 +1,156 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme inline {
+  --font-inter: "Inter", sans-serif;
+  --color-gray-1000: #323336;
+  --color-gray-1100: #A1A2A3;
+  --color-gray-1200: #77787B;
+  --color-gray-1300: #404249;
+  --color-gray-1400: #2B2C2E;
+  --color-gray-1500: #B7B7B7;
+  --color-gray-1600: #31343C;
+  --color-gray-1700: #41434A;
+  --color-gray-1800: #f0f0f0;
+  --color-black-1000: #14161A;
+  --color-black-1100: #07090E;
+  --color-blue-1000: #cefb16;
+  --color-blue-1100: #cefb16;
+  --color-blue2: #cefb16;
+  --color-blue3: #cefb16;
+  --color-blue4: #cefb16;
+  --color-blue5: #cefb16;
+  --color-black3: #0C0E13;
+  --shadow-3xl: 0 0 10px 1px rgba(255, 255, 255, 0.75) inset;
+  --shadow-4xl: 0 1px 1px 0 rgba(255, 255, 255, 0.20) inset, 0 -1px 2px 0 rgba(255, 255, 255, 0.05) inset;
+  --shadow-5xl: 0 4px 16px 0 rgba(206, 251, 22, 0.20), 0 1px 1px 0 rgba(255, 255, 255, 0.20) inset, 0 -1px 2px 0 rgba(255, 255, 255, 0.05) inset;
+  --shadow-6xl: 0 0 22.261px 0 rgba(255, 255, 255, 0.25);
+  --shadow-7xl: inset 0 0 10px 1px #fff9, 0 0 40px -10px #cefb16cc;
+  --breakpoint-xs: 390px;
+  --breakpoint-sm: 575px;
+  --breakpoint-md: 767px;
+  --breakpoint-lg: 991px;
+  --breakpoint-xl: 1199px;
+  --breakpoint-2xl: 1365px;
+  --breakpoint-4xl: 1438px;
+}
+
+.bg1 {
+  background: linear-gradient(180deg, #cefb16 0%, #cefb16 100%);
+}
+
+.body-bg {
+  background: linear-gradient(0deg, #1A1E28 -20.61%, #07090E 100%);
+}
+
+.card-bg {
+  background: linear-gradient(180deg, rgba(50, 51, 54, 0.72) 0%, rgba(50, 51, 54, 0.45) 100%);
+}
+
+.icon-bg {
+  background: linear-gradient(348deg, #1D212C 0.44%, #14171F 99.56%);
+}
+
+.progress-bg {
+  background: linear-gradient(180deg, #cefb16 0%, #cefb16 100%);
+}
+
+.card-bg2 {
+  background: linear-gradient(0deg, #323336 0%, #192444 100%);
+}
+
+.tag-bg {
+  background: linear-gradient(180deg, rgba(50, 51, 54, 0.80) 0%, rgba(50, 51, 54, 0.40) 100%);
+}
+
+.pricing-card-bg {
+  opacity: 1;
+  background: linear-gradient(348deg, #1D212C 0.44%, #14171F 99.56%);
+  box-shadow: inset 0 1px 1px #fff3, inset 0 -1px 2px #ffffff0d;
+}
+
+.pricing-most-card {
+  opacity: 1;
+  box-shadow: 0 1.6796px 8.39802px -.625px #cefb1626, 0 3.98096px 19.9048px -1.25px #cefb1624, 0 7.26168px 36.3084px -1.875px #cefb1624, 0 12.0725px 60.3627px -2.5px #cefb1621, 0 19.4962px 97.4808px -3.125px #cefb161f, 0 31.9133px 159.566px -3.75px #cefb161a, 0 54.9525px 274.762px -4.375px #cefb1612, 0 100px 500px -5px #cefb1600, inset 0 0 2px 1px #fff6;
+}
+
+.workflow-card-border {
+  background: radial-gradient(100% 100% at 0 0, #6c6d6f 0%, #161719 100%);
+  box-shadow: 20px 20px 20px -10px #0006;
+}
+
+.sidebar-bg {
+  background: linear-gradient(357deg, #151B27 2.53%, #07090E 97.47%);
+}
+
+.text-gradient {
+  background: linear-gradient(90deg, #cefb16 0%, #FFF 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.dropdown-bg {
+  background: linear-gradient(180deg, rgba(7, 9, 14, 0.95) 0%, rgba(7, 9, 14, 0.90) 100%);
+}
+
+html {
+  overflow: visible !important;
+  padding-right: 0px !important;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* Custom Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(20, 22, 26, 0.5);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(161, 162, 163, 0.3);
+  border-radius: 10px;
+  border: 1px solid rgba(20, 22, 26, 0.5);
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 162, 163, 0.5);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(161, 162, 163, 0.3) rgba(20, 22, 26, 0.5);
+}
