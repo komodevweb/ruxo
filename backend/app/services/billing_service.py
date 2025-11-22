@@ -40,29 +40,46 @@ class BillingService:
         )
         existing_subscription = result.scalar_one_or_none()
         
-        # If user has an active subscription, create a checkout session for upgrade
-        # This allows the user to see the new plan and complete payment through Stripe checkout
+        # If user has an active subscription, cancel it IMMEDIATELY before creating new checkout
+        # Users can only have one active subscription at a time
         if existing_subscription:
-            logger.info(f"User {user.id} has active subscription {existing_subscription.stripe_subscription_id}, creating checkout for upgrade to {plan_name}")
+            logger.info(f"User {user.id} has active subscription {existing_subscription.stripe_subscription_id}, canceling it and creating new checkout for {plan_name}")
             
             try:
                 # Get or create Stripe customer
                 customer_id = existing_subscription.stripe_customer_id or await self._get_or_create_customer(user)
             
-                # Cancel the existing subscription at period end (so it doesn't conflict)
-                # We'll create a new subscription through checkout
+                # Cancel the existing subscription IMMEDIATELY (not at period end)
+                # This ensures users can only have one active subscription at a time
                 try:
-                    stripe.Subscription.modify(
-                existing_subscription.stripe_subscription_id,
-                        cancel_at_period_end=True,
-                metadata={
-                            "user_id": str(user.id),
-                            "will_be_replaced_by": plan_name
-                        }
-                    )
-                    logger.info(f"Marked existing subscription {existing_subscription.stripe_subscription_id} to cancel at period end")
+                    stripe.Subscription.delete(existing_subscription.stripe_subscription_id)
+                    # Update status in our database immediately
+                    existing_subscription.status = "canceled"
+                    existing_subscription.updated_at = datetime.utcnow()
+                    self.session.add(existing_subscription)
+                    await self.session.commit()
+                    logger.info(f"Immediately canceled existing subscription {existing_subscription.stripe_subscription_id} for user {user.id}")
+                except stripe.error.StripeError as e:
+                    error_msg = str(e)
+                    # If subscription is already canceled or doesn't exist, just update our database
+                    if "No such subscription" in error_msg or "already been deleted" in error_msg:
+                        logger.info(f"Subscription {existing_subscription.stripe_subscription_id} already canceled in Stripe. Updating database only.")
+                        existing_subscription.status = "canceled"
+                        existing_subscription.updated_at = datetime.utcnow()
+                        self.session.add(existing_subscription)
+                        await self.session.commit()
+                    else:
+                        logger.error(f"Error canceling subscription {existing_subscription.stripe_subscription_id}: {e}")
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Failed to cancel existing subscription: {str(e)}"
+                        )
                 except Exception as e:
-                    logger.warning(f"Could not mark subscription for cancellation: {e}")
+                    logger.error(f"Unexpected error canceling subscription {existing_subscription.stripe_subscription_id}: {e}")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Failed to cancel existing subscription: {str(e)}"
+                    )
                 
                 # Apply 40% discount coupon for yearly plans
                 checkout_params = {
@@ -70,8 +87,8 @@ class BillingService:
                     "line_items": [{"price": plan.stripe_price_id, "quantity": 1}],
                     "mode": "subscription",
                     "customer": customer_id,
-                    "success_url": f"{settings.FRONTEND_URL}/settings?session_id={{CHECKOUT_SESSION_ID}}&upgraded=true",
-                    "cancel_url": f"{settings.FRONTEND_URL}/pricing",
+                    "success_url": f"{settings.FRONTEND_URL}/",
+                    "cancel_url": f"{settings.FRONTEND_URL}/upgrade",
                     "metadata": {
                     "user_id": str(user.id),
                     "plan_id": str(plan.id),
@@ -120,19 +137,28 @@ class BillingService:
         )
         other_active_subscriptions = result.scalars().all()
         
-        # Cancel any other active subscriptions to ensure only one active subscription
+        # Cancel any other active subscriptions IMMEDIATELY to ensure only one active subscription
         for old_sub in other_active_subscriptions:
-            logger.warning(f"Found unexpected active subscription {old_sub.stripe_subscription_id} for user {user.id}, canceling it")
+            logger.warning(f"Found unexpected active subscription {old_sub.stripe_subscription_id} for user {user.id}, canceling it immediately")
             try:
-                stripe.Subscription.modify(
-                    old_sub.stripe_subscription_id,
-                    cancel_at_period_end=True
-                )
+                # Cancel the subscription in Stripe IMMEDIATELY (not at period end)
+                stripe.Subscription.delete(old_sub.stripe_subscription_id)
                 old_sub.status = "canceled"
                 old_sub.updated_at = datetime.utcnow()
                 self.session.add(old_sub)
+                logger.info(f"Immediately canceled subscription {old_sub.stripe_subscription_id} for user {user.id}")
+            except stripe.error.StripeError as e:
+                error_msg = str(e)
+                # If subscription is already canceled or doesn't exist, just update our database
+                if "No such subscription" in error_msg or "already been deleted" in error_msg:
+                    logger.info(f"Subscription {old_sub.stripe_subscription_id} already canceled in Stripe. Updating database only.")
+                    old_sub.status = "canceled"
+                    old_sub.updated_at = datetime.utcnow()
+                    self.session.add(old_sub)
+                else:
+                    logger.error(f"Error canceling subscription {old_sub.stripe_subscription_id}: {e}")
             except Exception as e:
-                logger.error(f"Error canceling subscription {old_sub.stripe_subscription_id}: {e}")
+                logger.error(f"Unexpected error canceling subscription {old_sub.stripe_subscription_id}: {e}")
         
         if other_active_subscriptions:
             await self.session.commit()
@@ -147,8 +173,8 @@ class BillingService:
             "line_items": [{"price": plan.stripe_price_id, "quantity": 1}],
             "mode": "subscription",
             "customer": customer_id,
-            "success_url": f"{settings.FRONTEND_URL}/settings?session_id={{CHECKOUT_SESSION_ID}}",
-            "cancel_url": f"{settings.FRONTEND_URL}/pricing",
+            "success_url": f"{settings.FRONTEND_URL}/",
+            "cancel_url": f"{settings.FRONTEND_URL}/upgrade",
             "metadata": {
                 "user_id": str(user.id),
                 "plan_id": str(plan.id),
@@ -216,7 +242,7 @@ class BillingService:
 
         portal_session = stripe.billing_portal.Session.create(
             customer=subscription.stripe_customer_id,
-            return_url=f"{settings.FRONTEND_URL}/pricing",
+            return_url=f"{settings.FRONTEND_URL}/upgrade",
         )
         return portal_session.url
 

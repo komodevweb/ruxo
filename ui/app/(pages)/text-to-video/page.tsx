@@ -270,7 +270,7 @@ function page() {
 
      // Handle upgrade - redirect to pricing page
      const handleUpgrade = () => {
-          router.push("/pricing");
+          router.push("/upgrade");
      };
 
      // Get button text and action
@@ -289,7 +289,7 @@ function page() {
           }
           
           if (!hasEnoughCredits) {
-               return { text: "Get More Credits", action: () => router.push("/pricing") };
+               return { text: "Get More Credits", action: () => router.push("/upgrade") };
           }
           
           return { 

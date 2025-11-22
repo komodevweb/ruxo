@@ -31,10 +31,10 @@ export default function BillingCancelPage() {
         </div>
         <div className="flex gap-4 justify-center">
           <Link
-            href="/pricing"
+            href="/upgrade"
             className="px-6 py-3 bg-blue-500 text-white rounded-xl font-medium hover:bg-blue-600 transition-colors"
           >
-            Back to Pricing
+            Back to Upgrade
           </Link>
           <Link
             href="/dashboard"

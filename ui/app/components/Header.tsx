@@ -50,7 +50,7 @@ function Header() {
         ) : (
           <div className="flex items-center gap-4">
             <Link 
-              href="/pricing" 
+              href="/upgrade" 
               className="text-xs font-bold transition-all duration-300 shadow-3xl hover:shadow-7xl text-black inline-block py-2 px-3 bg1 rounded-lg"
             >
               Get More Credits

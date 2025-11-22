@@ -364,7 +364,7 @@ function page() {
           }
           
           if (!hasEnoughCredits) {
-               return { text: "Get More Credits", action: () => router.push("/pricing") };
+               return { text: "Get More Credits", action: () => router.push("/upgrade") };
           }
           
           return { 
@@ -1456,11 +1456,11 @@ function page() {
                                                        <div className="w-6 h-6 border-2 border-blue-1100 border-t-transparent rounded-full animate-spin"></div>
                                                   </div>
                                              )}
-                                        </div>
+                                   </div>
                                         <div className="flex-1 min-w-0">
                                              <h4 className="text-sm font-medium text-white">Generating Video...</h4>
                                              <p className="text-xs text-white/60">{progress}% complete</p>
-                                        </div>
+                              </div>
                                    </div>
                                    {/* Progress bar */}
                                    <div className="w-full h-1.5 bg-gray-1200/30 rounded-full overflow-hidden">

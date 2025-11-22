@@ -118,7 +118,7 @@ export default function SettingsPage() {
               </div>
               <div className='flex items-center justify-between mt-8 mb-2'>
                 <span className='block text-base font-medium leading-[120%] text-white/[60%]'>Current Plan</span>
-                <Link href="/pricing" className='block text-xs font-normal underline leading-[120%] text-white/[60%]'>
+                <Link href="/upgrade" className='block text-xs font-normal underline leading-[120%] text-white/[60%]'>
                   {user.plan_name ? "Manage" : "Subscribe"}
                 </Link>
               </div>
@@ -132,7 +132,7 @@ export default function SettingsPage() {
                     <p className='text-[10px] font-medium leading-[120%] text-white/60'>Do more with the Ultimate or Creator Plan</p>
                   </div>
                   <Link 
-                    href="/pricing" 
+                    href="/upgrade" 
                     className='text-[10px] font-medium leading-[120%] text-white inline-block py-[9px] px-2 transition-all ease-in-out duration-500 hover:bg-gray-1200 bg-gray-1100/30 rounded-lg backdrop-blur-[4px]'
                   >
                     Upgrade

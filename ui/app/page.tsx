@@ -1,4 +1,3 @@
-
 import Footer from "./components/Footer";
 import FeaturedModels from "./components/FeaturedModels";
 import ImageGallery from "./components/ImageGallery";

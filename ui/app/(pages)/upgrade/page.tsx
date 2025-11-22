@@ -340,7 +340,7 @@ function page() {
      };
      return (
           <>
-               <section id="pricing" className="w-full font-inter bg-black-1100 md:pt-[160px] pt-[110px]  py-20">
+               <section id="upgrade" className="w-full font-inter bg-black-1100 md:pt-[160px] pt-[110px]  py-20">
                     <div className="w-full max-w-[1400px] px-5 mx-auto">
                          <div className="text-center mb-12">
                               <h2 className="md:text-[48px] text-[32px] mb-3 text-white font-medium leading-[120%] tracking-[-1px]">Choose Your Plan</h2>

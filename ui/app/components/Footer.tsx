@@ -37,7 +37,7 @@ function Footer({ className }: FooterProps) {
                               {/* Pages */}
                               <div className="flex flex-col gap-4">
                                    <h6 className="text-sm font-medium text-white">Pages</h6>
-                                   <Link href="/pricing" className="text-sm text-white/60 hover:text-white transition-colors">Pricing</Link>
+                                   <Link href="/upgrade" className="text-sm text-white/60 hover:text-white transition-colors">Upgrade</Link>
                                    <Link href="/terms" className="text-sm text-white/60 hover:text-white transition-colors">Terms of Use</Link>
                                    <Link href="/privacy" className="text-sm text-white/60 hover:text-white transition-colors">Privacy Policy</Link>
                               </div>
