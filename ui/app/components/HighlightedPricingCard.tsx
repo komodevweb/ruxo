@@ -17,7 +17,7 @@ interface HighlightedPricingCardProps {
      buttonText: string;
      buttonDisabled?: boolean;
      billingText?: string;
-     onClick?: () => void;
+     onClick?: (e?: React.MouseEvent) => void;
      isDimmed?: boolean;
 }
 
@@ -78,13 +78,21 @@ const HighlightedPricingCard: React.FC<HighlightedPricingCardProps> = ({
                          {description}
                     </p>
 
-                    <button
-                         onClick={onClick}
-                         disabled={buttonDisabled}
-                         className={`w-full inner-shadow-xxl h-10 rounded-xl flex items-center justify-center text-black text-center font-inter font-medium text-base bg-white hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white ${isDimmed ? "opacity-50" : ""}`}
-                    >
-                         {buttonText}
-                    </button>
+               <button
+                    onClick={(e) => {
+                         console.log('🔘 HighlightedPricingCard button clicked', {
+                              plan,
+                              hasOnClick: !!onClick,
+                              isTrusted: e.isTrusted,
+                              type: e.type
+                         });
+                         onClick?.(e);
+                    }}
+                    disabled={buttonDisabled}
+                    className={`w-full inner-shadow-xxl h-10 rounded-xl flex items-center justify-center text-black text-center font-inter font-medium text-base bg-white hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white ${isDimmed ? "opacity-50" : ""}`}
+               >
+                    {buttonText}
+               </button>
 
 
 

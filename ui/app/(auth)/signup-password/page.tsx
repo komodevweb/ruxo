@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import TextInput from "@/app/ui/TextInput";
 import Link from "next/link";
+import { trackViewContent } from "@/lib/facebookTracking";
 
 export default function SignupPasswordPage() {
   const router = useRouter();
@@ -14,6 +15,13 @@ export default function SignupPasswordPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Track ViewContent when page loads
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      trackViewContent(`${window.location.origin}/signup-password`);
+    }
+  }, []);
 
   // Redirect logged-in users to homepage
   useEffect(() => {

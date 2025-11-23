@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import TextInput from "@/app/ui/TextInput";
 import Link from "next/link";
+import { trackViewContent } from "@/lib/facebookTracking";
 
 export default function SignupEmailPage() {
   const router = useRouter();
@@ -12,6 +13,13 @@ export default function SignupEmailPage() {
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
+
+  // Track ViewContent when page loads
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      trackViewContent(`${window.location.origin}/signup-email`);
+    }
+  }, []);
 
   // Redirect logged-in users to homepage
   useEffect(() => {

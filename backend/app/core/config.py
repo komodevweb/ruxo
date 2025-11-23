@@ -90,6 +90,10 @@ class Settings(BaseSettings):
     REDIS_URL: Optional[str] = "redis://localhost:6379/0"
     REDIS_ENABLED: bool = True
     REDIS_CACHE_TTL: int = 3600  # Default cache TTL in seconds (1 hour)
+    
+    # Facebook Conversions API
+    FACEBOOK_PIXEL_ID: Optional[str] = None  # Facebook Pixel ID (e.g., "860080813089481")
+    FACEBOOK_ACCESS_TOKEN: Optional[str] = None  # Facebook Conversions API Access Token
 
     model_config = SettingsConfigDict(case_sensitive=True, env_file=".env", extra="ignore")
 

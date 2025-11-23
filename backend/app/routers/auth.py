@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query, Response, Request as FastAPIRequest
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel, EmailStr
@@ -48,15 +48,22 @@ class AuthResponse(BaseModel):
 
 @router.post("/signup", response_model=AuthResponse)
 async def signup(
-    request: SignUpRequest,
+    signup_request: SignUpRequest,
+    http_request: FastAPIRequest,
     session: AsyncSession = Depends(get_session)
 ):
     """Sign up a new user via Supabase."""
     try:
-        # Create user in Supabase
+        # Create user in Supabase with display_name in user metadata
         auth_response = supabase.auth.sign_up({
-            "email": request.email,
-            "password": request.password,
+            "email": signup_request.email,
+            "password": signup_request.password,
+            "options": {
+                "data": {
+                    "display_name": signup_request.display_name,
+                    "full_name": signup_request.display_name  # Also set full_name for compatibility
+                }
+            }
         })
         
         logger.info(f"Supabase signup response: user={auth_response.user}, session={auth_response.session}")
@@ -84,19 +91,76 @@ async def signup(
             )
             user_profile = result.scalar_one_or_none()
             
+            # Get tracking context for later use (email verification webhook)
+            client_ip = None
+            client_user_agent = None
+            fbp = None
+            fbc = None
+            if http_request:
+                client_ip = http_request.client.host if http_request.client else None
+                client_user_agent = http_request.headers.get("user-agent")
+                fbp = http_request.cookies.get("_fbp")
+                fbc = http_request.cookies.get("_fbc")
+            
             if not user_profile:
                 user_profile = UserProfile(
                     id=user_id,
-                    email=request.email,
-                    display_name=request.display_name,
+                    email=signup_request.email,
+                    display_name=signup_request.display_name,
+                    # Store tracking context for CompleteRegistration on email verification
+                    signup_ip=client_ip,
+                    signup_user_agent=client_user_agent,
+                    signup_fbp=fbp,
+                    signup_fbc=fbc,
                 )
                 session.add(user_profile)
                 await session.commit()
             elif not user_profile.display_name:
-                # Update display name if not already set
-                user_profile.display_name = request.display_name
+                # Update display name and tracking context if not already set
+                user_profile.display_name = signup_request.display_name
+                user_profile.signup_ip = client_ip
+                user_profile.signup_user_agent = client_user_agent
+                user_profile.signup_fbp = fbp
+                user_profile.signup_fbc = fbc
                 session.add(user_profile)
                 await session.commit()
+            
+            # Track CompleteRegistration event for users requiring email verification
+            try:
+                from app.services.facebook_conversions import FacebookConversionsService
+                
+                conversions_service = FacebookConversionsService()
+                
+                # Extract first and last name from display_name if available
+                first_name = None
+                last_name = None
+                if user_profile.display_name:
+                    name_parts = user_profile.display_name.split(maxsplit=1)
+                    first_name = name_parts[0] if name_parts else None
+                    last_name = name_parts[1] if len(name_parts) > 1 else None
+                
+                # Tracking context was already saved above when creating user profile
+                
+                # Track CompleteRegistration (fire and forget - don't block response)
+                import asyncio
+                import time
+                # Generate unique event_id for deduplication
+                event_id = f"registration_{user_profile.id}_{int(time.time())}"
+                logger.info(f"🎯 Triggering CompleteRegistration for user: {user_profile.email} (event_id: {event_id})")
+                asyncio.create_task(conversions_service.track_complete_registration(
+                    email=user_profile.email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    external_id=str(user_profile.id),
+                    client_ip=client_ip,
+                    client_user_agent=client_user_agent,
+                    fbp=fbp,
+                    fbc=fbc,
+                    event_source_url=f"{settings.FRONTEND_URL}/signup-password",
+                    event_id=event_id,
+                ))
+            except Exception as e:
+                logger.warning(f"Failed to track CompleteRegistration event for user: {str(e)}")
             
             # Return success response indicating email verification needed
             from fastapi.responses import JSONResponse
@@ -123,8 +187,8 @@ async def signup(
         if not user_profile:
             user_profile = UserProfile(
                 id=user_id,
-                email=request.email,
-                display_name=request.display_name,
+                email=signup_request.email,
+                display_name=signup_request.display_name,
             )
             session.add(user_profile)
             await session.commit()
@@ -143,7 +207,7 @@ async def signup(
                 # Don't fail signup if storage setup fails, but log the error
         elif not user_profile.display_name:
             # Update display name if not already set
-            user_profile.display_name = request.display_name
+            user_profile.display_name = signup_request.display_name
             session.add(user_profile)
             await session.commit()
             await session.refresh(user_profile)
@@ -175,6 +239,89 @@ async def signup(
                 plan_interval = plan.interval
                 credits_per_month = plan.credits_per_month
         
+        # Track CompleteRegistration event for Facebook Conversions API
+        try:
+            from app.services.facebook_conversions import FacebookConversionsService
+            
+            conversions_service = FacebookConversionsService()
+            
+            # Extract first and last name from display_name if available
+            first_name = None
+            last_name = None
+            if user_profile.display_name:
+                name_parts = user_profile.display_name.split(maxsplit=1)
+                first_name = name_parts[0] if name_parts else None
+                last_name = name_parts[1] if len(name_parts) > 1 else None
+            
+            # Get client IP and user agent from HTTP request
+            client_ip = None
+            client_user_agent = None
+            fbp = None
+            fbc = None
+            if http_request:
+                client_ip = http_request.client.host if http_request.client else None
+                client_user_agent = http_request.headers.get("user-agent")
+                # Get Facebook cookies if available
+                fbp = http_request.cookies.get("_fbp")
+                fbc = http_request.cookies.get("_fbc")
+            
+            # Track registration (fire and forget - don't block response)
+            import asyncio
+            import uuid
+            import time
+            # Generate unique event_id for deduplication (if user also has Meta Pixel)
+            event_id = f"registration_{user_profile.id}_{int(time.time())}"
+            logger.info(f"🎯 Triggering CompleteRegistration for verified user: {user_profile.email} (event_id: {event_id})")
+            asyncio.create_task(conversions_service.track_complete_registration(
+                email=user_profile.email,
+                first_name=first_name,
+                last_name=last_name,
+                external_id=str(user_profile.id),
+                client_ip=client_ip,
+                client_user_agent=client_user_agent,
+                fbp=fbp,
+                fbc=fbc,
+                event_source_url=f"{settings.FRONTEND_URL}/signup-password",
+                event_id=event_id,
+            ))
+        except Exception as e:
+            logger.warning(f"Failed to track CompleteRegistration event: {str(e)}")
+        
+        # Track ViewContent event for signup page
+        try:
+            from app.services.facebook_conversions import FacebookConversionsService
+            
+            conversions_service = FacebookConversionsService()
+            
+            # Get client IP and user agent from HTTP request if available
+            client_ip = None
+            client_user_agent = None
+            fbp = None
+            fbc = None
+            try:
+                if http_request:
+                    client_ip = http_request.client.host if http_request.client else None
+                    client_user_agent = http_request.headers.get("user-agent")
+                    fbp = http_request.cookies.get("_fbp")
+                    fbc = http_request.cookies.get("_fbc")
+            except:
+                pass
+            
+            # Track ViewContent (fire and forget - don't block response)
+            import asyncio
+            asyncio.create_task(conversions_service.track_view_content(
+                email=user_profile.email,
+                external_id=str(user_profile.id),
+                client_ip=client_ip,
+                client_user_agent=client_user_agent,
+                fbp=fbp,
+                fbc=fbc,
+                event_source_url=f"{settings.FRONTEND_URL}/signup",
+            ))
+            logger.info(f"Triggered ViewContent event tracking for signup - user {user_profile.id}")
+        except Exception as e:
+            logger.warning(f"Failed to track ViewContent event for signup: {str(e)}")
+        
         return AuthResponse(
             token=token,
             user=UserMe(
@@ -196,15 +343,16 @@ async def signup(
 
 @router.post("/login", response_model=AuthResponse)
 async def login(
-    request: SignInRequest,
+    login_request: SignInRequest,
+    http_request: FastAPIRequest,
     session: AsyncSession = Depends(get_session)
 ):
     """Sign in user via Supabase."""
     try:
         # Authenticate with Supabase
         auth_response = supabase.auth.sign_in_with_password({
-            "email": request.email,
-            "password": request.password,
+            "email": login_request.email,
+            "password": login_request.password,
         })
         
         logger.info(f"Supabase login response: user={auth_response.user}, session={auth_response.session}")
@@ -244,7 +392,7 @@ async def login(
                 # Auto-create if doesn't exist
                 user_profile = UserProfile(
                     id=user_id,
-                    email=request.email,
+                    email=login_request.email,
                 )
                 session.add(user_profile)
                 await session.commit()
@@ -313,6 +461,41 @@ async def login(
                 plan_name = plan.display_name
                 plan_interval = plan.interval
                 credits_per_month = plan.credits_per_month
+        
+        # Track ViewContent event for login page
+        try:
+            from app.services.facebook_conversions import FacebookConversionsService
+            
+            conversions_service = FacebookConversionsService()
+            
+            # Get client IP and user agent from HTTP request if available
+            client_ip = None
+            client_user_agent = None
+            fbp = None
+            fbc = None
+            try:
+                if http_request:
+                    client_ip = http_request.client.host if http_request.client else None
+                    client_user_agent = http_request.headers.get("user-agent")
+                    fbp = http_request.cookies.get("_fbp")
+                    fbc = http_request.cookies.get("_fbc")
+            except:
+                pass
+            
+            # Track ViewContent (fire and forget - don't block response)
+            import asyncio
+            asyncio.create_task(conversions_service.track_view_content(
+                email=user_profile.email,
+                external_id=str(user_profile.id),
+                client_ip=client_ip,
+                client_user_agent=client_user_agent,
+                fbp=fbp,
+                fbc=fbc,
+                event_source_url=f"{settings.FRONTEND_URL}/login",
+            ))
+            logger.info(f"Triggered ViewContent event tracking for login - user {user_profile.id}")
+        except Exception as e:
+            logger.warning(f"Failed to track ViewContent event for login: {str(e)}")
         
         return AuthResponse(
             token=token,
@@ -652,6 +835,7 @@ class OAuthExchangeRequest(BaseModel):
 @router.post("/oauth/exchange", response_model=AuthResponse)
 async def oauth_exchange(
     request: OAuthExchangeRequest,
+    http_request: Request = None,
     session: AsyncSession = Depends(get_session)
 ):
     """
@@ -719,7 +903,11 @@ async def oauth_exchange(
             )
             user_profile = result.scalar_one_or_none()
             
+            is_new_user = False
             if not user_profile:
+                is_new_user = True
+                logger.info(f"🆕 [OAUTH EXCHANGE] NEW USER detected: {email} (ID: {user_id})")
+                
                 # Create new user profile in our database
                 display_name = user_data.get("user_metadata", {}).get("full_name") or \
                               user_data.get("user_metadata", {}).get("name") or \
@@ -743,8 +931,59 @@ async def oauth_exchange(
                 
                 # Create wallet for new user (fast operation)
                 wallet = await credits_service.get_or_create_wallet(user_id)
+                
+                # Track CompleteRegistration for OAuth signup (OAuth users are pre-verified)
+                try:
+                    from app.services.facebook_conversions import FacebookConversionsService
+                    
+                    conversions_service = FacebookConversionsService()
+                    
+                    # Extract first and last name from display_name
+                    first_name = None
+                    last_name = None
+                    if user_profile.display_name:
+                        name_parts = user_profile.display_name.split(maxsplit=1)
+                        first_name = name_parts[0] if name_parts else None
+                        last_name = name_parts[1] if len(name_parts) > 1 else None
+                    
+                    # Get client info from HTTP request
+                    client_ip = None
+                    client_user_agent = None
+                    fbp = None
+                    fbc = None
+                    if http_request:
+                        client_ip = http_request.client.host if http_request.client else None
+                        client_user_agent = http_request.headers.get("user-agent")
+                        fbp = http_request.cookies.get("_fbp")
+                        fbc = http_request.cookies.get("_fbc")
+                    
+                    # Generate unique event_id for deduplication
+                    import asyncio
+                    import time
+                    event_id = f"registration_{user_profile.id}_{int(time.time())}"
+                    
+                    logger.info(f"🎯 [OAUTH EXCHANGE] Triggering CompleteRegistration for NEW OAuth user: {user_profile.email} (event_id: {event_id})")
+                    
+                    # Fire CompleteRegistration event (fire and forget)
+                    asyncio.create_task(conversions_service.track_complete_registration(
+                        email=user_profile.email,
+                        first_name=first_name,
+                        last_name=last_name,
+                        external_id=str(user_profile.id),
+                        client_ip=client_ip,
+                        client_user_agent=client_user_agent,
+                        fbp=fbp,
+                        fbc=fbc,
+                        event_source_url=f"{settings.FRONTEND_URL}/",
+                        event_id=event_id,
+                    ))
+                except Exception as e:
+                    logger.warning(f"❌ [OAUTH EXCHANGE] Failed to track CompleteRegistration for OAuth user: {str(e)}")
             else:
                 # Existing user - update email if it changed (only if needed)
+                logger.info(f"👤 [OAUTH EXCHANGE] EXISTING USER login: {email} (ID: {user_id})")
+                logger.info(f"ℹ️  [OAUTH EXCHANGE] CompleteRegistration NOT fired - user already exists")
+                
                 if email and user_profile.email != email:
                     user_profile.email = email
                     session.add(user_profile)

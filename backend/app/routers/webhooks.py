@@ -1,10 +1,13 @@
 import stripe
 import logging
+import time
 from fastapi import APIRouter, Request, Depends, Header, HTTPException
 from app.core.config import settings
 from app.services.billing_service import BillingService
 from app.db.session import get_session
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from app.models.user import UserProfile
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -66,4 +69,92 @@ async def stripe_webhook(
         raise HTTPException(status_code=500, detail=f"Error processing webhook: {str(e)}")
     
     return {"status": "success"}
+
+@router.post("/supabase-auth")
+async def supabase_auth_webhook(
+    request: Request,
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Supabase Auth webhook endpoint.
+    
+    Handles auth events from Supabase including:
+    - user.created: When a new user signs up
+    - user.updated: When a user's email is verified
+    
+    This is used to fire CompleteRegistration event when email is verified.
+    """
+    try:
+        payload = await request.json()
+        event_type = payload.get("type")
+        event_data = payload.get("record", {})
+        
+        logger.info(f"📬 Supabase Auth Webhook: {event_type}")
+        logger.debug(f"Webhook payload: {payload}")
+        
+        # Handle user email verification
+        if event_type == "user.updated":
+            user_id = event_data.get("id")
+            email = event_data.get("email")
+            email_confirmed_at = event_data.get("email_confirmed_at")
+            
+            # Check if email was just verified (email_confirmed_at changed from None to a timestamp)
+            if user_id and email and email_confirmed_at:
+                logger.info(f"✉️ Email verified for user: {email} ({user_id})")
+                
+                # Get user profile from our database
+                result = await session.execute(
+                    select(UserProfile).where(UserProfile.id == user_id)
+                )
+                user_profile = result.scalar_one_or_none()
+                
+                if user_profile:
+                    # Track CompleteRegistration now that email is verified
+                    # Use stored tracking context from signup
+                    try:
+                        from app.services.facebook_conversions import FacebookConversionsService
+                        
+                        conversions_service = FacebookConversionsService()
+                        
+                        # Extract first and last name from display_name
+                        first_name = None
+                        last_name = None
+                        if user_profile.display_name:
+                            name_parts = user_profile.display_name.split(maxsplit=1)
+                            first_name = name_parts[0] if name_parts else None
+                            last_name = name_parts[1] if len(name_parts) > 1 else None
+                        
+                        # Generate unique event_id for deduplication
+                        import asyncio
+                        event_id = f"registration_{user_profile.id}_{int(time.time())}"
+                        
+                        logger.info(f"🎯 Triggering CompleteRegistration for verified user: {user_profile.email} (event_id: {event_id})")
+                        logger.info(f"   Using stored context: IP={user_profile.signup_ip}, UA={user_profile.signup_user_agent[:50] if user_profile.signup_user_agent else None}")
+                        
+                        # Fire CompleteRegistration event using stored tracking context (fire and forget)
+                        asyncio.create_task(conversions_service.track_complete_registration(
+                            email=user_profile.email,
+                            first_name=first_name,
+                            last_name=last_name,
+                            external_id=str(user_profile.id),
+                            client_ip=user_profile.signup_ip,
+                            client_user_agent=user_profile.signup_user_agent,
+                            fbp=user_profile.signup_fbp,
+                            fbc=user_profile.signup_fbc,
+                            event_source_url=f"{settings.FRONTEND_URL}/",
+                            event_id=event_id,
+                        ))
+                        
+                        logger.info(f"✅ CompleteRegistration event triggered for {user_profile.email}")
+                    except Exception as e:
+                        logger.error(f"Failed to track CompleteRegistration for verified user {user_id}: {str(e)}")
+                else:
+                    logger.warning(f"User profile not found for verified user {user_id}")
+        
+        return {"status": "success", "event": event_type}
+        
+    except Exception as e:
+        logger.error(f"Error processing Supabase auth webhook: {str(e)}", exc_info=True)
+        # Return 200 anyway so Supabase doesn't retry
+        return {"status": "error", "message": str(e)}
 

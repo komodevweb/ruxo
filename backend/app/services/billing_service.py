@@ -17,8 +17,49 @@ class BillingService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.credits_service = CreditsService(session)
+    
+    def _build_checkout_metadata(
+        self,
+        user_id: str,
+        plan_id: str,
+        plan_name: str,
+        client_ip: Optional[str] = None,
+        client_user_agent: Optional[str] = None,
+        fbp: Optional[str] = None,
+        fbc: Optional[str] = None,
+        **extra_metadata
+    ) -> dict:
+        """Build checkout session metadata with tracking context for Purchase events."""
+        metadata = {
+            "user_id": user_id,
+            "plan_id": plan_id,
+            "plan_name": plan_name,
+        }
+        
+        # Add tracking context if available (for later Purchase event)
+        if client_ip:
+            metadata["client_ip"] = client_ip
+        if client_user_agent:
+            metadata["client_user_agent"] = client_user_agent
+        if fbp:
+            metadata["fbp"] = fbp
+        if fbc:
+            metadata["fbc"] = fbc
+        
+        # Add any extra metadata (e.g., is_upgrade, existing_subscription_id)
+        metadata.update(extra_metadata)
+        
+        return metadata
 
-    async def create_checkout_session(self, user: UserProfile, plan_name: str) -> str:
+    async def create_checkout_session(
+        self,
+        user: UserProfile,
+        plan_name: str,
+        client_ip: Optional[str] = None,
+        client_user_agent: Optional[str] = None,
+        fbp: Optional[str] = None,
+        fbc: Optional[str] = None
+    ) -> str:
         """Create Stripe checkout session for a subscription plan or upgrade existing subscription."""
         import logging
         logger = logging.getLogger(__name__)
@@ -157,11 +198,15 @@ class BillingService:
                             "customer": customer_id,
                             "success_url": f"{settings.FRONTEND_URL}/",
                             "cancel_url": f"{settings.FRONTEND_URL}/upgrade",
-                            "metadata": {
-                                "user_id": str(user.id),
-                                "plan_id": str(plan.id),
-                                "plan_name": plan.name
-                            }
+                            "metadata": self._build_checkout_metadata(
+                                user_id=str(user.id),
+                                plan_id=str(plan.id),
+                                plan_name=plan.name,
+                                client_ip=client_ip,
+                                client_user_agent=client_user_agent,
+                                fbp=fbp,
+                                fbc=fbc
+                            )
                         }
                         
                         # Apply 40% discount coupon for yearly plans
@@ -212,13 +257,17 @@ class BillingService:
                         "customer": customer_id,
                         "success_url": f"{settings.FRONTEND_URL}/",
                         "cancel_url": f"{settings.FRONTEND_URL}/upgrade",
-                        "metadata": {
-                        "user_id": str(user.id),
-                        "plan_id": str(plan.id),
-                            "plan_name": plan.name,
-                            "is_upgrade": "true",
-                            "existing_subscription_id": existing_subscription.stripe_subscription_id
-                        },
+                        "metadata": self._build_checkout_metadata(
+                            user_id=str(user.id),
+                            plan_id=str(plan.id),
+                            plan_name=plan.name,
+                            client_ip=client_ip,
+                            client_user_agent=client_user_agent,
+                            fbp=fbp,
+                            fbc=fbc,
+                            is_upgrade="true",
+                            existing_subscription_id=existing_subscription.stripe_subscription_id
+                        ),
                         "subscription_data": {
                             "metadata": {
                                 "user_id": str(user.id),
@@ -323,11 +372,15 @@ class BillingService:
             "customer": customer_id,
             "success_url": f"{settings.FRONTEND_URL}/",
             "cancel_url": f"{settings.FRONTEND_URL}/upgrade",
-            "metadata": {
-                "user_id": str(user.id),
-                "plan_id": str(plan.id),
-                "plan_name": plan.name
-            }
+            "metadata": self._build_checkout_metadata(
+                user_id=str(user.id),
+                plan_id=str(plan.id),
+                plan_name=plan.name,
+                client_ip=client_ip,
+                client_user_agent=client_user_agent,
+                fbp=fbp,
+                fbc=fbc
+            )
         }
         
         # Apply 40% discount coupon for yearly plans
@@ -496,6 +549,90 @@ class BillingService:
         if subscription_id:
             stripe_subscription = stripe.Subscription.retrieve(subscription_id)
             await self._process_subscription(stripe_subscription, uuid.UUID(user_id))
+            
+            # Track Purchase event for Facebook Conversions API
+            try:
+                from app.services.facebook_conversions import FacebookConversionsService
+                from app.models.user import UserProfile
+                from sqlalchemy.future import select
+                
+                logger.info("=" * 80)
+                logger.info("💰 [PURCHASE TRACKING] Starting Facebook Purchase event tracking")
+                
+                # Get user profile for email
+                result = await self.session.execute(
+                    select(UserProfile).where(UserProfile.id == uuid.UUID(user_id))
+                )
+                user = result.scalar_one_or_none()
+                
+                if user:
+                    # Get plan details for value
+                    plan_name = session.get("metadata", {}).get("plan_name")
+                    plan_result = await self.session.execute(
+                        select(Plan).where(Plan.name == plan_name)
+                    )
+                    plan = plan_result.scalar_one_or_none()
+                    
+                    # Calculate value in dollars
+                    value = 0.0
+                    if plan:
+                        value = plan.amount_cents / 100.0
+                    
+                    # Get amount paid from session (this is the actual amount charged)
+                    amount_total = session.get("amount_total", 0)
+                    if amount_total:
+                        value = amount_total / 100.0
+                    
+                    currency = session.get("currency", "USD").upper()
+                    event_id = session.get("id")  # Use checkout session ID as event_id for deduplication
+                    
+                    # Get tracking context from session metadata (captured at checkout initiation)
+                    metadata = session.get("metadata", {})
+                    client_ip = metadata.get("client_ip")
+                    client_user_agent = metadata.get("client_user_agent")
+                    fbp = metadata.get("fbp")
+                    fbc = metadata.get("fbc")
+                    
+                    # Extract first and last name from display_name for better event matching
+                    first_name = None
+                    last_name = None
+                    if user.display_name:
+                        name_parts = user.display_name.split(maxsplit=1)
+                        first_name = name_parts[0] if name_parts else None
+                        last_name = name_parts[1] if len(name_parts) > 1 else None
+                    
+                    logger.info(f"💰 [PURCHASE TRACKING] User: {user.email} (ID: {user.id})")
+                    logger.info(f"💰 [PURCHASE TRACKING] Name: {first_name} {last_name}" if first_name else "💰 [PURCHASE TRACKING] Name: Not available")
+                    logger.info(f"💰 [PURCHASE TRACKING] Plan: {plan_name}")
+                    logger.info(f"💰 [PURCHASE TRACKING] Value: ${value} {currency}")
+                    logger.info(f"💰 [PURCHASE TRACKING] Event ID: {event_id}")
+                    logger.info(f"💰 [PURCHASE TRACKING] Event Source URL: {settings.FRONTEND_URL}/")
+                    logger.info(f"💰 [PURCHASE TRACKING] Tracking Context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}..., fbp={fbp}, fbc={fbc}")
+                    
+                    conversions_service = FacebookConversionsService()
+                    
+                    # Track purchase (fire and forget - don't block response)
+                    import asyncio
+                    asyncio.create_task(conversions_service.track_purchase(
+                        value=value,
+                        currency=currency,
+                        email=user.email,
+                        first_name=first_name,
+                        last_name=last_name,
+                        external_id=str(user.id),
+                        client_ip=client_ip,
+                        client_user_agent=client_user_agent,
+                        fbp=fbp,
+                        fbc=fbc,
+                        event_source_url=f"{settings.FRONTEND_URL}/",
+                        event_id=event_id,
+                    ))
+                    logger.info(f"✅ [PURCHASE TRACKING] Purchase event triggered successfully")
+                    logger.info("=" * 80)
+                else:
+                    logger.warning(f"⚠️  [PURCHASE TRACKING] User not found: {user_id}")
+            except Exception as e:
+                logger.error(f"❌ [PURCHASE TRACKING] Failed to track Purchase event: {str(e)}", exc_info=True)
         else:
             logger.warning(f"Checkout completed but no subscription_id for user {user_id}")
 

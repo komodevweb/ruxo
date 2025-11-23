@@ -12,6 +12,12 @@ class UserProfile(SQLModel, table=True):
     display_name: Optional[str] = None
     avatar_url: Optional[str] = None
     
+    # Tracking context for Facebook Conversions API (stored at signup, used at email verification)
+    signup_ip: Optional[str] = None
+    signup_user_agent: Optional[str] = None
+    signup_fbp: Optional[str] = None  # Facebook browser ID cookie
+    signup_fbc: Optional[str] = None  # Facebook click ID cookie
+    
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )

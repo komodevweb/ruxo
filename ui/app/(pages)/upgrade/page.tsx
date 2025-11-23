@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api";
+import { trackInitiateCheckout } from "@/lib/facebookTracking";
 
 interface Plan {
      id: string;
@@ -21,6 +22,7 @@ interface Plan {
 }
 
 function page() {
+     console.warn("DEBUG: Upgrade Page Component Rendered");
      const { user, loading: authLoading, checkAuth } = useAuth();
      const router = useRouter();
      
@@ -35,6 +37,7 @@ function page() {
      useEffect(() => {
           fetchPlans();
      }, []);
+     
      
      // Refresh user data when page loads to ensure we have latest subscription info
      useEffect(() => {
@@ -92,11 +95,45 @@ function page() {
           }
      };
 
-     const handleSelectPlan = async (planName: string) => {
+     const handleSelectPlan = async (planName: string, event?: React.MouseEvent) => {
+          // Log all calls to this function for debugging
+          console.log('🎯 handleSelectPlan called', {
+               planName,
+               hasEvent: !!event,
+               isTrusted: event?.isTrusted,
+               eventType: event?.type,
+               timestamp: new Date().toISOString()
+          });
+          
+          // Prevent any automatic triggers - only allow actual user clicks
+          // event.isTrusted is false for programmatic clicks, true for real user clicks
+          if (event && !event.isTrusted) {
+               console.warn('❌ InitiateCheckout blocked: Not a trusted user event');
+               return;
+          }
+          
+          // If no event provided at all, this is likely a programmatic call - block it
+          if (!event) {
+               console.error('❌ InitiateCheckout blocked: No event provided (likely programmatic call)');
+               console.trace('Stack trace for blocked InitiateCheckout');
+               return;
+          }
+
           // Redirect to login if not authenticated
           if (!user) {
+               console.log('Redirecting to login - user not authenticated');
                router.push('/login');
                return;
+          }
+
+          // Track InitiateCheckout event ONLY when user explicitly clicks to select a plan
+          console.log('✅ User clicked Select Plan - tracking InitiateCheckout for plan:', planName);
+          try {
+               await trackInitiateCheckout(`button-click:${planName}`);
+               console.log('✅ InitiateCheckout tracked successfully');
+          } catch (error) {
+               // Silently fail - tracking should not block checkout
+               console.debug('Failed to track InitiateCheckout:', error);
           }
 
           // Set processing state immediately for fast feedback
@@ -494,7 +531,7 @@ function page() {
                                         
                                         // Determine button text - show loading if auth is still loading
                                         let buttonText = "Select Plan";
-                                        let buttonOnClick: (() => void) | undefined = undefined;
+                                        let buttonOnClick: ((e?: React.MouseEvent) => void) | undefined = undefined;
                                         
                                         if (isAuthLoading) {
                                              buttonText = "Loading...";
@@ -502,7 +539,7 @@ function page() {
                                              buttonText = "Processing...";
                                         } else if (planStatus.type === 'upgrade') {
                                              buttonText = "Upgrade";
-                                             buttonOnClick = () => handleSelectPlan(plan.name);
+                                             buttonOnClick = (e?: React.MouseEvent) => handleSelectPlan(plan.name, e);
                                         } else if (planStatus.type === 'current') {
                                              buttonText = "Manage Subscription";
                                              buttonOnClick = handleManagePlan;
@@ -510,7 +547,7 @@ function page() {
                                              // Show "Not Available" for any downgrade or incompatible plan
                                              buttonText = "Not Available";
                                         } else if (planStatus.canSelect) {
-                                             buttonOnClick = () => handleSelectPlan(plan.name);
+                                             buttonOnClick = (e?: React.MouseEvent) => handleSelectPlan(plan.name, e);
                                         }
                                         
                                         // Dim any card that shows "Not Available"

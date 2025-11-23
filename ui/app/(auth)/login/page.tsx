@@ -5,11 +5,19 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import Buttons from "@/app/ui/Buttons";
 import Link from "next/link";
+import { trackViewContent } from "@/lib/facebookTracking";
 
 export default function LoginPage() {
   const router = useRouter();
   const { signInWithOAuth, user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState<string | null>(null);
+
+  // Track ViewContent when page loads
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      trackViewContent(`${window.location.origin}/login`);
+    }
+  }, []);
 
   // Redirect logged-in users to homepage
   useEffect(() => {

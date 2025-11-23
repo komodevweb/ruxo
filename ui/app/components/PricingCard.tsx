@@ -17,7 +17,7 @@ interface PricingCardProps {
      buttonText: string;
      buttonDisabled?: boolean;
      highlight?: boolean;
-     onClick?: () => void;
+     onClick?: (e?: React.MouseEvent) => void;
      isDimmed?: boolean;
 }
 
@@ -71,13 +71,21 @@ const PricingCard: React.FC<PricingCardProps> = ({
                          {description}
                     </p>
 
-                    <button
-                         onClick={onClick}
-                         disabled={buttonDisabled}
-                         className={`w-full transition inner-shadow-xxl text-base h-10 rounded-xl flex items-center justify-center text-black text-center font-inter font-medium bg-white hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white ${isDimmed ? "opacity-50" : ""}`}
-                    >
-                         {buttonText}
-                    </button>
+               <button
+                    onClick={(e) => {
+                         console.log('🔘 PricingCard button clicked', {
+                              plan,
+                              hasOnClick: !!onClick,
+                              isTrusted: e.isTrusted,
+                              type: e.type
+                         });
+                         onClick?.(e);
+                    }}
+                    disabled={buttonDisabled}
+                    className={`w-full transition inner-shadow-xxl text-base h-10 rounded-xl flex items-center justify-center text-black text-center font-inter font-medium bg-white hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white ${isDimmed ? "opacity-50" : ""}`}
+               >
+                    {buttonText}
+               </button>
 
                     <h4 className="text-base font-medium font-inter text-white mt-8 mb-6">
                          {planInlude}
