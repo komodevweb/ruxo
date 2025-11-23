@@ -255,6 +255,30 @@ function Page() {
           // eslint-disable-next-line react-hooks/exhaustive-deps
      }, [selectedModel, duration]);
 
+     // Cleanup blob URLs on component unmount to prevent memory leaks
+     useEffect(() => {
+          return () => {
+               // Revoke image preview blob URL
+               if (imagePreview && imagePreview.startsWith('blob:')) {
+                    try {
+                         URL.revokeObjectURL(imagePreview);
+                         console.log("🧹 Cleaned up image preview blob URL on unmount");
+                    } catch (e) {
+                         console.warn("Failed to revoke image blob URL on unmount:", e);
+                    }
+               }
+               // Revoke audio preview blob URL
+               if (audioPreview && audioPreview.startsWith('blob:')) {
+                    try {
+                         URL.revokeObjectURL(audioPreview);
+                         console.log("🧹 Cleaned up audio preview blob URL on unmount");
+                    } catch (e) {
+                         console.warn("Failed to revoke audio blob URL on unmount:", e);
+                    }
+               }
+          };
+     }, [imagePreview, audioPreview]);
+
      const loadModels = async () => {
           try {
                const response = await fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/image-to-video/models`);
@@ -370,44 +394,6 @@ function Page() {
           
           return 0;
      };
-     
-
-     // Handle upgrade to Stripe checkout
-     const handleUpgrade = async () => {
-          if (!user) {
-               router.push("/login");
-               return;
-          }
-
-          try {
-               // Fetch available plans and use the first/cheapest one, or default to starter_monthly
-               let planName = "starter_monthly"; // Default fallback (cheapest plan)
-               
-               try {
-                    const plansResponse = await apiClient.get<Array<{ name: string; amount_cents: number }>>('/billing/plans');
-                    if (plansResponse && plansResponse.length > 0) {
-                         // Use the first plan (sorted by price, so cheapest)
-                         planName = plansResponse[0].name;
-                    }
-               } catch (planErr) {
-                    console.warn("Could not fetch plans, using default:", planErr);
-                    // Use default planName
-               }
-
-               const response = await apiClient.post<{ url: string }>('/billing/create-checkout-session', {
-                    plan_name: planName,
-               });
-               
-               // Redirect to Stripe checkout
-               if (response.url) {
-                    window.location.href = response.url;
-               }
-          } catch (err: any) {
-               console.error("Error creating checkout session:", err);
-               setError(err.message || "Failed to create checkout session. Please try again.");
-          }
-     };
-
      // Get button text and action
      const getButtonConfig = () => {
           if (isGenerating) return { text: "Generating...", action: () => {} }; // Prevent action when generating
@@ -420,7 +406,8 @@ function Page() {
           const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
           
           if (!hasSubscription) {
-               return { text: "Upgrade Plan", action: handleUpgrade };
+               // Redirect to /upgrade page where user can see all available plans
+               return { text: "Upgrade Plan", action: () => router.push("/upgrade") };
           }
           
           if (!hasEnoughCredits) {
@@ -693,19 +680,38 @@ function Page() {
      const handleImageSelect = async (file: File) => {
           if (!file.type.startsWith("image/")) {
                setError("Please select an image file (JPG, PNG, etc.)");
+               // Reset input to allow reselection
+               if (imageInputRef.current) {
+                    imageInputRef.current.value = '';
+               }
                return;
           }
 
           // Check file size (10 MB limit)
           if (file.size > 10 * 1024 * 1024) {
                setError("Image file must be 10 MB or less");
+               // Reset input to allow reselection
+               if (imageInputRef.current) {
+                    imageInputRef.current.value = '';
+               }
                return;
           }
 
           // Clear old image data IMMEDIATELY before setting new one
           // This ensures the old Backblaze URL is not used
           const oldUrl = imageUrlRef.current;
+          const oldPreview = imagePreview;
           console.log("🗑️ Clearing old image. Previous URL was:", oldUrl);
+          
+          // Revoke old preview blob URL to prevent memory leaks
+          if (oldPreview && oldPreview.startsWith('blob:')) {
+               try {
+                    URL.revokeObjectURL(oldPreview);
+                    console.log("🧹 Revoked old preview blob URL");
+               } catch (e) {
+                    console.warn("Failed to revoke blob URL:", e);
+               }
+          }
           
           // Clear ref FIRST (synchronous, immediate) - this prevents any old URL from being used
           imageUrlRef.current = null;
@@ -726,8 +732,20 @@ function Page() {
           const reader = new FileReader();
           reader.onload = (e) => {
                setImagePreview(e.target?.result as string);
+               console.log("✅ Image preview created");
+          };
+          reader.onerror = (e) => {
+               console.error("❌ Failed to create image preview:", e);
+               setError("Failed to load image preview");
           };
           reader.readAsDataURL(file);
+          
+          // Reset the file input immediately after reading the file
+          // This allows the user to select the same file again if needed
+          if (imageInputRef.current) {
+               imageInputRef.current.value = '';
+               console.log("🔄 File input reset to allow reselection");
+          }
           
           console.log("✅ Image file selected and preview created. Upload will happen when Generate is clicked.");
      };
@@ -735,17 +753,37 @@ function Page() {
      const handleAudioSelect = async (file: File) => {
           if (!file.type.startsWith("audio/")) {
                setError("Please select an audio file (WAV or MP3)");
+               // Reset input to allow reselection
+               if (audioInputRef.current) {
+                    audioInputRef.current.value = '';
+               }
                return;
           }
 
           // Check file size (15 MB limit)
           if (file.size > 15 * 1024 * 1024) {
                setError("Audio file must be 15 MB or less");
+               // Reset input to allow reselection
+               if (audioInputRef.current) {
+                    audioInputRef.current.value = '';
+               }
                return;
           }
 
           // Clear old audio data before setting new one
           // This ensures the old Backblaze URL is not used if upload is cancelled
+          const oldPreview = audioPreview;
+          
+          // Revoke old preview blob URL to prevent memory leaks
+          if (oldPreview && oldPreview.startsWith('blob:')) {
+               try {
+                    URL.revokeObjectURL(oldPreview);
+                    console.log("🧹 Revoked old audio preview blob URL");
+               } catch (e) {
+                    console.warn("Failed to revoke audio blob URL:", e);
+               }
+          }
+          
           setAudioFile(null);
           setAudioPreview(null);
           setAudioUrl(null);
@@ -759,14 +797,26 @@ function Page() {
           const reader = new FileReader();
           reader.onload = (e) => {
                setAudioPreview(e.target?.result as string);
+               console.log("✅ Audio preview created");
+          };
+          reader.onerror = (e) => {
+               console.error("❌ Failed to create audio preview:", e);
+               setError("Failed to load audio preview");
           };
           reader.readAsDataURL(file);
+
+          // Reset the file input immediately after reading the file
+          // This allows the user to select the same file again if needed
+          if (audioInputRef.current) {
+               audioInputRef.current.value = '';
+               console.log("🔄 Audio file input reset to allow reselection");
+          }
 
           // Upload to Backblaze immediately
           const url = await uploadFileToBackblaze(file, true);
           if (url) {
                setAudioUrl(url);
-               console.log("Audio uploaded to Backblaze:", url);
+               console.log("✅ Audio uploaded to Backblaze:", url);
                // Old URL is already cleared above, so new URL will be used
           } else {
                // If upload failed, restore previous state or clear everything
