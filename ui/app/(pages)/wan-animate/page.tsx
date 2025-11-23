@@ -1137,7 +1137,7 @@ function page() {
                                    <div className="grid xl:grid-cols-3 md:grid-cols-2 md:max-w-[980px] max-w-full mx-auto gap-4">
                                         <div className="card-bg shadow-4xl rounded-2xl p-1.5 backdrop-blur-[4.69px] border border-transparent hover:border-blue-1100 hover:shadow-5xl transition-all ease-in-out duration-500">
                                              <div className="w-full aspect-[4/3] overflow-hidden rounded-xl">
-                                                  <img src="/images/wan/Upload-image.png" alt="" className="w-full h-full object-cover" />
+                                                  <img src="/images/wan/Upload-image.webp" alt="" className="w-full h-full object-cover" />
                                              </div>
                                              <div className="mt-2 py-4 px-2">
                                                   <h4 className="text-xl font-medium flex items-center gap-2 leading-[120%] text-white">

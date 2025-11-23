@@ -1106,6 +1106,45 @@ export default function ImagePage() {
                                                             const baseFilename = filename.split('.')[0];
                                                             const finalFilename = `${baseFilename}.${fileExtension}`;
                                                             
+                                                            // Ensure blob type matches the file extension for iOS compatibility
+                                                            const mimeType = fileExtension === 'png' ? 'image/png' : 'image/jpeg';
+                                                            if (blob.type !== mimeType) {
+                                                                 // Create a new blob with the correct MIME type
+                                                                 blob = new Blob([blob], { type: mimeType });
+                                                            }
+                                                            
+                                                            // Check if Web Share API is available (iOS Safari, Chrome on Android)
+                                                            // This allows saving directly to Photos app on iOS
+                                                            if (navigator.share && navigator.canShare) {
+                                                                 try {
+                                                                      // Ensure blob is valid and has content
+                                                                      if (!blob || blob.size === 0) {
+                                                                           throw new Error("Invalid blob");
+                                                                      }
+                                                                      
+                                                                      const file = new File([blob], finalFilename, { type: mimeType });
+                                                                      
+                                                                      // Check if we can share this file
+                                                                      if (navigator.canShare({ files: [file] })) {
+                                                                           await navigator.share({
+                                                                                files: [file],
+                                                                                title: finalFilename,
+                                                                           });
+                                                                           return; // Successfully shared, exit early
+                                                                      } else {
+                                                                           console.log("File cannot be shared via Web Share API");
+                                                                      }
+                                                                 } catch (shareError: any) {
+                                                                      // If user cancels share, don't log it
+                                                                      if (shareError.name === 'AbortError') {
+                                                                           return; // User cancelled, don't fall through to download
+                                                                      }
+                                                                      // Log other errors for debugging
+                                                                      console.log("Web Share API failed, using fallback:", shareError.message || shareError);
+                                                                 }
+                                                            }
+                                                            
+                                                            // Fallback for desktop or when Web Share API is not available
                                                             const blobUrl = window.URL.createObjectURL(blob);
                                                             const link = document.createElement('a');
                                                             link.href = blobUrl;
@@ -1116,7 +1155,7 @@ export default function ImagePage() {
                                                             window.URL.revokeObjectURL(blobUrl);
                                                        } catch (error) {
                                                             console.error("Download failed:", error);
-                                                            // Fallback to opening in new tab
+                                                            // Final fallback to opening in new tab
                                                             window.open(url, '_blank');
                                                        }
                                                   };

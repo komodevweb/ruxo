@@ -127,15 +127,62 @@ class BillingService:
                     if "No such subscription" in error_msg:
                         # Subscription doesn't exist in Stripe, but exists in our DB
                         # This can happen with admin subscriptions or deleted subscriptions
-                        logger.warning(f"Subscription {existing_subscription.stripe_subscription_id} not found in Stripe. Cannot upgrade via Stripe API.")
+                        # Allow creating a new checkout session instead of blocking
+                        logger.warning(f"Subscription {existing_subscription.stripe_subscription_id} not found in Stripe. Marking as cancelled and creating new checkout session.")
+                        
+                        # Mark the old subscription as cancelled since it doesn't exist in Stripe
+                        existing_subscription.status = "cancelled"
+                        existing_subscription.cancelled_at = datetime.utcnow()
+                        self.session.add(existing_subscription)
+                        await self.session.commit()
+                        
+                        # Create a new checkout session for the new plan
+                        # Verify the price ID exists in Stripe
+                        try:
+                            stripe.Price.retrieve(plan.stripe_price_id)
+                        except stripe.error.InvalidRequestError as price_err:
+                            if "No such price" in str(price_err):
+                                logger.error(f"Price ID {plan.stripe_price_id} for plan '{plan.name}' does not exist in Stripe.")
+                                raise HTTPException(
+                                    status_code=500,
+                                    detail=f"Invalid price configuration for plan '{plan.display_name}'. Please contact support."
+                                )
+                            raise
+                        
+                        # Create checkout session for new subscription
+                        checkout_params = {
+                            "payment_method_types": ["card"],
+                            "line_items": [{"price": plan.stripe_price_id, "quantity": 1}],
+                            "mode": "subscription",
+                            "customer": customer_id,
+                            "success_url": f"{settings.FRONTEND_URL}/",
+                            "cancel_url": f"{settings.FRONTEND_URL}/upgrade",
+                            "metadata": {
+                                "user_id": str(user.id),
+                                "plan_id": str(plan.id),
+                                "plan_name": plan.name
+                            }
+                        }
+                        
+                        # Apply 40% discount coupon for yearly plans
+                        if plan.interval == "year":
+                            checkout_params["discounts"] = [{"coupon": "ruxo40"}]
+                        
+                        try:
+                            checkout_session = stripe.checkout.Session.create(**checkout_params)
+                            logger.info(f"Checkout session created for new subscription (old one didn't exist in Stripe): {checkout_session.id}")
+                            return checkout_session.url
+                        except stripe.error.StripeError as checkout_err:
+                            logger.error(f"Error creating checkout session: {checkout_err}")
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Failed to create checkout session: {str(checkout_err)}"
+                            )
+                    else:
                         raise HTTPException(
                             status_code=400,
-                            detail="Your subscription cannot be modified through checkout. Please contact support or use the customer portal."
+                            detail=f"Failed to update subscription: {str(e)}"
                         )
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Failed to update subscription: {str(e)}"
-                    )
                 except stripe.error.StripeError as e:
                     logger.error(f"Stripe error updating subscription {existing_subscription.stripe_subscription_id}: {e}")
                     raise HTTPException(
@@ -143,65 +190,67 @@ class BillingService:
                         detail=f"Failed to update subscription: {str(e)}"
                     )
                 
-                # Verify the price ID exists in Stripe before creating checkout
-                try:
-                    stripe.Price.retrieve(plan.stripe_price_id)
-                except stripe.error.InvalidRequestError as e:
-                    if "No such price" in str(e):
-                        logger.error(f"Price ID {plan.stripe_price_id} for plan '{plan.name}' does not exist in Stripe. Please update the price ID in the database.")
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"Invalid price configuration for plan '{plan.display_name}'. Please contact support or update the plan's Stripe price ID in the database."
-                        )
-                    raise
-                
-                # Apply 40% discount coupon for yearly plans
-                checkout_params = {
-                    "payment_method_types": ["card"],
-                    "line_items": [{"price": plan.stripe_price_id, "quantity": 1}],
-                    "mode": "subscription",
-                    "customer": customer_id,
-                    "success_url": f"{settings.FRONTEND_URL}/",
-                    "cancel_url": f"{settings.FRONTEND_URL}/upgrade",
-                    "metadata": {
-                    "user_id": str(user.id),
-                    "plan_id": str(plan.id),
-                        "plan_name": plan.name,
-                        "is_upgrade": "true",
-                        "existing_subscription_id": existing_subscription.stripe_subscription_id
-                    },
-                    "subscription_data": {
+                # Subscription was successfully updated via Stripe API
+                if existing_subscription:
+                    # Verify the price ID exists in Stripe before creating checkout
+                    try:
+                        stripe.Price.retrieve(plan.stripe_price_id)
+                    except stripe.error.InvalidRequestError as e:
+                        if "No such price" in str(e):
+                            logger.error(f"Price ID {plan.stripe_price_id} for plan '{plan.name}' does not exist in Stripe. Please update the price ID in the database.")
+                            raise HTTPException(
+                                status_code=500,
+                                detail=f"Invalid price configuration for plan '{plan.display_name}'. Please contact support or update the plan's Stripe price ID in the database."
+                            )
+                        raise
+                    
+                    # Apply 40% discount coupon for yearly plans
+                    checkout_params = {
+                        "payment_method_types": ["card"],
+                        "line_items": [{"price": plan.stripe_price_id, "quantity": 1}],
+                        "mode": "subscription",
+                        "customer": customer_id,
+                        "success_url": f"{settings.FRONTEND_URL}/",
+                        "cancel_url": f"{settings.FRONTEND_URL}/upgrade",
                         "metadata": {
-                            "user_id": str(user.id),
-                            "plan_id": str(plan.id),
+                        "user_id": str(user.id),
+                        "plan_id": str(plan.id),
                             "plan_name": plan.name,
                             "is_upgrade": "true",
                             "existing_subscription_id": existing_subscription.stripe_subscription_id
+                        },
+                        "subscription_data": {
+                            "metadata": {
+                                "user_id": str(user.id),
+                                "plan_id": str(plan.id),
+                                "plan_name": plan.name,
+                                "is_upgrade": "true",
+                                "existing_subscription_id": existing_subscription.stripe_subscription_id
+                            }
                         }
                     }
-                }
-                
-                # Apply 40% discount coupon for yearly plans
-                if plan.interval == "year":
-                    checkout_params["discounts"] = [{"coupon": "ruxo40"}]
-                
-                # Create checkout session for the new plan
-                # Stripe will handle the upgrade and proration
-                try:
-                    checkout_session = stripe.checkout.Session.create(**checkout_params)
-                    logger.info(f"Checkout session created for upgrade: {checkout_session.id}")
-                    return checkout_session.url
-                except stripe.error.InvalidRequestError as e:
-                    if "No such price" in str(e):
-                        logger.error(f"Price ID {plan.stripe_price_id} for plan '{plan.name}' does not exist in Stripe.")
+                    
+                    # Apply 40% discount coupon for yearly plans
+                    if plan.interval == "year":
+                        checkout_params["discounts"] = [{"coupon": "ruxo40"}]
+                    
+                    # Create checkout session for the new plan
+                    # Stripe will handle the upgrade and proration
+                    try:
+                        checkout_session = stripe.checkout.Session.create(**checkout_params)
+                        logger.info(f"Checkout session created for upgrade: {checkout_session.id}")
+                        return checkout_session.url
+                    except stripe.error.InvalidRequestError as e:
+                        if "No such price" in str(e):
+                            logger.error(f"Price ID {plan.stripe_price_id} for plan '{plan.name}' does not exist in Stripe.")
+                            raise HTTPException(
+                                status_code=500,
+                                detail=f"Invalid price configuration for plan '{plan.display_name}'. The Stripe price ID '{plan.stripe_price_id}' does not exist. Please update the plan's price ID in the database."
+                            )
                         raise HTTPException(
-                            status_code=500,
-                            detail=f"Invalid price configuration for plan '{plan.display_name}'. The Stripe price ID '{plan.stripe_price_id}' does not exist. Please update the plan's price ID in the database."
+                            status_code=400,
+                            detail=f"Failed to create upgrade checkout: {str(e)}"
                         )
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Failed to create upgrade checkout: {str(e)}"
-                    )
             except HTTPException:
                 raise
             except stripe.error.StripeError as e:

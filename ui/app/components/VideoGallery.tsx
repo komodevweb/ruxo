@@ -171,6 +171,30 @@ export default function VideoGallery({ jobs, selectedJobId, loading = false, onS
     try {
       const response = await fetch(url);
       const blob = await response.blob();
+      
+      // Check if Web Share API is available (iOS Safari, Chrome on Android)
+      // This allows saving directly to Photos app on iOS
+      if (navigator.share && navigator.canShare) {
+        try {
+          const file = new File([blob], filename, { type: blob.type });
+          
+          // Check if we can share this file
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: filename,
+            });
+            return; // Successfully shared, exit early
+          }
+        } catch (shareError: any) {
+          // If user cancels share or it fails, fall through to download
+          if (shareError.name !== 'AbortError') {
+            console.log("Web Share API not available or failed, using fallback:", shareError);
+          }
+        }
+      }
+      
+      // Fallback for desktop or when Web Share API is not available
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
@@ -181,7 +205,7 @@ export default function VideoGallery({ jobs, selectedJobId, loading = false, onS
       window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
       console.error("Download failed:", error);
-      // Fallback to opening in new tab
+      // Final fallback to opening in new tab
       window.open(url, '_blank');
     }
   };
