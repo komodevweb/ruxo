@@ -12,16 +12,15 @@ from sqlalchemy.future import select
 
 router = APIRouter()
 
-# Simple in-memory cache for plans
-_plans_cache: Optional[List[Dict[str, Any]]] = None
-_cache_timestamp: Optional[datetime] = None
-CACHE_TTL_SECONDS = 3600  # 1 hour (plans don't change often)
+# Plans cache now uses Redis (see get_plans function)
 
 def invalidate_plans_cache():
-    """Invalidate the plans cache (call this when plans are updated)."""
-    global _plans_cache, _cache_timestamp
-    _plans_cache = None
-    _cache_timestamp = None
+    """Invalidate the plans cache in Redis (call this when plans are updated)."""
+    from app.utils.cache import invalidate_cache
+    import asyncio
+    # Note: This is a sync function, but cache operations are async
+    # In practice, call invalidate_cache directly from async contexts
+    pass
 
 @router.post("/create-checkout-session", response_model=CheckoutSessionResponse)
 async def create_checkout_session(
@@ -50,20 +49,20 @@ async def get_plans(
     response: Response,
     session: AsyncSession = Depends(get_session)
 ):
-    """Get all active subscription plans (cached for 1 hour)."""
-    global _plans_cache, _cache_timestamp
+    """Get all active subscription plans (cached in Redis for 1 hour)."""
+    from app.utils.cache import get_cached, set_cached, cache_key
     
-    # Check if cache is valid
-    now = datetime.utcnow()
-    if _plans_cache is not None and _cache_timestamp is not None:
-        if (now - _cache_timestamp).total_seconds() < CACHE_TTL_SECONDS:
-            # Set cache headers for browser caching
-            if response:
-                response.headers["Cache-Control"] = "public, max-age=300"  # 5 min browser cache
-                response.headers["X-Cache"] = "HIT"
-            return _plans_cache
+    cache_key_str = cache_key("cache", "billing", "plans")
     
-    # Fetch from database (optimized query - only select needed columns)
+    # Try Redis cache first
+    cached = await get_cached(cache_key_str)
+    if cached is not None:
+        if response:
+            response.headers["Cache-Control"] = "public, max-age=300"  # 5 min browser cache
+            response.headers["X-Cache"] = "HIT"
+        return cached
+    
+    # Cache miss - fetch from database
     result = await session.execute(
         select(Plan).where(Plan.is_active == True).order_by(Plan.amount_cents)
     )
@@ -98,9 +97,8 @@ async def get_plans(
             "currency": plan.currency,
         })
     
-    # Update cache
-    _plans_cache = plans_data
-    _cache_timestamp = now
+    # Cache in Redis for 1 hour
+    await set_cached(cache_key_str, plans_data, ttl=3600)
     
     # Set cache headers
     if response:

@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_MAX_AGE: int = 3600
 
+    # Redis Configuration
+    REDIS_URL: Optional[str] = "redis://localhost:6379/0"
+    REDIS_ENABLED: bool = True
+    REDIS_CACHE_TTL: int = 3600  # Default cache TTL in seconds (1 hour)
+
     model_config = SettingsConfigDict(case_sensitive=True, env_file=".env", extra="ignore")
 
 settings = Settings()

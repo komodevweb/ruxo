@@ -153,6 +153,7 @@ async def signup(
         
         # Get subscription and plan info (if any)
         plan_name = None
+        plan_interval = None
         credits_per_month = None
         from app.models.billing import Subscription, Plan
         
@@ -171,6 +172,7 @@ async def signup(
             plan = plan_result.scalar_one_or_none()
             if plan:
                 plan_name = plan.display_name  # Use display_name for user-friendly display
+                plan_interval = plan.interval
                 credits_per_month = plan.credits_per_month
         
         return AuthResponse(
@@ -179,6 +181,7 @@ async def signup(
                 **user_profile.model_dump(),
                 credit_balance=wallet.balance_credits,
                 plan_name=plan_name,
+                plan_interval=plan_interval,
                 credits_per_month=credits_per_month
             )
         )
@@ -287,11 +290,38 @@ async def login(
                 logger.error(f"Error fetching wallet for user {user_id}: {wallet_error}")
                 wallet_balance = 0
         
+        # Get subscription and plan info
+        plan_name = None
+        plan_interval = None
+        credits_per_month = None
+        from app.models.billing import Subscription, Plan
+        
+        result = await session.execute(
+            select(Subscription).where(
+                Subscription.user_id == user_id,
+                Subscription.status == "active"
+            )
+        )
+        subscription = result.scalar_one_or_none()
+        
+        if subscription and subscription.plan_id:
+            plan_result = await session.execute(
+                select(Plan).where(Plan.id == subscription.plan_id)
+            )
+            plan = plan_result.scalar_one_or_none()
+            if plan:
+                plan_name = plan.display_name
+                plan_interval = plan.interval
+                credits_per_month = plan.credits_per_month
+        
         return AuthResponse(
             token=token,
             user=UserMe(
                 **user_profile.model_dump(),
-                credit_balance=wallet_balance
+                credit_balance=wallet_balance,
+                plan_name=plan_name,
+                plan_interval=plan_interval,
+                credits_per_month=credits_per_month
             )
         )
     except HTTPException:
@@ -431,13 +461,24 @@ async def read_users_me(
     current_user: UserProfile = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
+    """Get current user profile with account settings (cached for 5 minutes)."""
     from app.models.billing import Subscription, Plan
+    from app.utils.cache import get_cached, set_cached, cache_key
     
+    cache_key_str = cache_key("cache", "user", str(current_user.id), "profile")
+    
+    # Try cache first
+    cached = await get_cached(cache_key_str)
+    if cached is not None:
+        return UserMe(**cached)
+    
+    # Cache miss - fetch from database
     credits_service = CreditsService(session)
     wallet = await credits_service.get_wallet(current_user.id)
     
     # Get subscription and plan info
     plan_name = None
+    plan_interval = None
     credits_per_month = None
     
     result = await session.execute(
@@ -455,14 +496,22 @@ async def read_users_me(
         plan = plan_result.scalar_one_or_none()
         if plan:
             plan_name = plan.display_name  # Use display_name for user-friendly display
+            plan_interval = plan.interval
             credits_per_month = plan.credits_per_month
     
-    return UserMe(
+    user_data = UserMe(
         **current_user.model_dump(),
         credit_balance=wallet.balance_credits,
         plan_name=plan_name,
+        plan_interval=plan_interval,
         credits_per_month=credits_per_month
     )
+    
+    # Cache for 5 minutes (profile doesn't change often)
+    # Use mode='json' to serialize UUIDs and datetimes properly
+    await set_cached(cache_key_str, user_data.model_dump(mode='json'), ttl=300)
+    
+    return user_data
 
 @router.put("/me", response_model=UserMe)
 async def update_user_profile(
@@ -470,8 +519,9 @@ async def update_user_profile(
     current_user: UserProfile = Depends(get_current_user),
     session: AsyncSession = Depends(get_session)
 ):
-    """Update current user's profile."""
+    """Update current user's profile and invalidate cache."""
     from app.models.billing import Subscription, Plan
+    from app.utils.cache import invalidate_user_cache
     
     credits_service = CreditsService(session)
     
@@ -485,10 +535,14 @@ async def update_user_profile(
     await session.commit()
     await session.refresh(current_user)
     
+    # Invalidate user cache after update
+    await invalidate_user_cache(str(current_user.id))
+    
     wallet = await credits_service.get_wallet(current_user.id)
     
     # Get subscription and plan info
     plan_name = None
+    plan_interval = None
     credits_per_month = None
     
     result = await session.execute(
@@ -506,12 +560,14 @@ async def update_user_profile(
         plan = plan_result.scalar_one_or_none()
         if plan:
             plan_name = plan.display_name  # Use display_name for user-friendly display
+            plan_interval = plan.interval
             credits_per_month = plan.credits_per_month
     
     return UserMe(
         **current_user.model_dump(),
         credit_balance=wallet.balance_credits,
         plan_name=plan_name,
+        plan_interval=plan_interval,
         credits_per_month=credits_per_month
     )
 
@@ -711,6 +767,7 @@ async def oauth_exchange(
             
             # Get subscription and plan info
             plan_name = None
+            plan_interval = None
             credits_per_month = None
             from app.models.billing import Subscription, Plan
             
@@ -731,6 +788,7 @@ async def oauth_exchange(
                 plan = plan_result.scalar_one_or_none()
                 if plan:
                     plan_name = plan.display_name
+                    plan_interval = plan.interval
                     credits_per_month = plan.credits_per_month
             
             # Return response immediately (fast path)
@@ -740,6 +798,7 @@ async def oauth_exchange(
                     **user_profile.model_dump(),
                     credit_balance=wallet.balance_credits,
                     plan_name=plan_name,
+                    plan_interval=plan_interval,
                     credits_per_month=credits_per_month
                 )
             )
@@ -838,6 +897,7 @@ async def oauth_callback_post(
         
         # Get subscription and plan info
         plan_name = None
+        plan_interval = None
         credits_per_month = None
         from app.models.billing import Subscription, Plan
         
@@ -856,6 +916,7 @@ async def oauth_callback_post(
             plan = plan_result.scalar_one_or_none()
             if plan:
                 plan_name = plan.display_name
+                plan_interval = plan.interval
                 credits_per_month = plan.credits_per_month
         
         return {
@@ -864,6 +925,7 @@ async def oauth_callback_post(
                 **user_profile.model_dump(),
                 credit_balance=wallet.balance_credits,
                 plan_name=plan_name,
+                plan_interval=plan_interval,
                 credits_per_month=credits_per_month
             )
         }

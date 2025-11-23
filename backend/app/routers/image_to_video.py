@@ -252,10 +252,25 @@ def calculate_credit_cost(model_id: str, resolution: str, duration: int, generat
 @router.get("/models")
 async def get_available_models():
     """
-    Get all available image-to-video models with their configurations.
+    Get all available image-to-video models with their configurations (cached in Redis).
     """
+    from app.utils.cache import get_cached, set_cached, cache_key
+    
+    cache_key_str = cache_key("cache", "image-to-video", "models")
+    
+    # Try cache first
+    cached = await get_cached(cache_key_str)
+    if cached is not None:
+        return cached
+    
+    # Cache miss - build models list
     models = list(IMAGE_TO_VIDEO_MODELS.values())
-    return {"models": models}
+    result = {"models": models}
+    
+    # Cache for 24 hours (models rarely change)
+    await set_cached(cache_key_str, result, ttl=86400)
+    
+    return result
 
 
 @router.get("/calculate-credits")

@@ -33,6 +33,15 @@ class CreditsService:
         self.session.add(transaction)
         self.session.add(wallet)
         await self.session.commit()
+        
+        # Invalidate credit cache
+        from app.utils.cache import invalidate_cache, cache_key
+        cache_key_str = cache_key("cache", "user", str(user_id), "credits")
+        await invalidate_cache(cache_key_str)
+        # Also invalidate profile cache (includes credit balance)
+        profile_cache_key = cache_key("cache", "user", str(user_id), "profile")
+        await invalidate_cache(profile_cache_key)
+        
         return wallet
 
     async def spend_credits(self, user_id: uuid.UUID, amount: int, reason: str, metadata: dict = None):
@@ -53,5 +62,14 @@ class CreditsService:
         self.session.add(transaction)
         self.session.add(wallet)
         await self.session.commit()
+        
+        # Invalidate credit cache
+        from app.utils.cache import invalidate_cache, cache_key
+        cache_key_str = cache_key("cache", "user", str(user_id), "credits")
+        await invalidate_cache(cache_key_str)
+        # Also invalidate profile cache (includes credit balance)
+        profile_cache_key = cache_key("cache", "user", str(user_id), "profile")
+        await invalidate_cache(profile_cache_key)
+        
         return wallet
 

@@ -11,6 +11,7 @@ interface User {
   avatar_url: string | null;
   credit_balance: number;
   plan_name: string | null;
+  plan_interval: string | null; // 'month' or 'year'
   credits_per_month: number | null; // Credits provided by the plan
 }
 
@@ -33,6 +34,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    // Only run on client side
+    if (typeof window === 'undefined') return;
+
     // Check if user is authenticated on mount
     checkAuth();
 

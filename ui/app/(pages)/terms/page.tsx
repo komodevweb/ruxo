@@ -1,5 +1,22 @@
 import Footer from "@/app/components/Footer"
 import Link from "next/link"
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Terms of Use - Ruxo - Service Terms & Conditions",
+  description: "Read Ruxo's Terms of Use to understand the rules and guidelines for using our AI creation platform and services.",
+  keywords: "terms of use, terms and conditions, service terms, Ruxo terms",
+  openGraph: {
+    title: "Terms of Use - Ruxo",
+    description: "Read Ruxo's Terms of Use to understand the rules and guidelines for using our AI creation platform.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Terms of Use - Ruxo",
+    description: "Read Ruxo's Terms of Use to understand our service terms and conditions.",
+  },
+};
 
 function page() {
      return (

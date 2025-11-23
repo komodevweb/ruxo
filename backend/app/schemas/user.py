@@ -20,6 +20,7 @@ class UserProfileRead(UserProfileBase):
 class UserMe(UserProfileRead):
     # Include subscription and credits info in the detailed "me" response
     plan_name: Optional[str] = None
+    plan_interval: Optional[str] = None  # 'month' or 'year'
     credit_balance: int = 0
     credits_per_month: Optional[int] = None  # Credits provided by the plan
 

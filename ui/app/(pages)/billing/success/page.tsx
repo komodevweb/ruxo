@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 
-export default function BillingSuccessPage() {
+function BillingSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { checkAuth } = useAuth();
@@ -82,6 +82,20 @@ export default function BillingSuccessPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BillingSuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="font-inter bg-black-1100 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-white/60">Loading...</p>
+        </div>
+      </div>
+    }>
+      <BillingSuccessContent />
+    </Suspense>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/lib/api";
@@ -8,7 +8,7 @@ import TextInput from "@/app/ui/TextInput";
 import Link from "next/link";
 import { SettingsSkeleton } from '@/app/components/SettingsSkeleton';
 
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, signOut, loading: authLoading, checkAuth } = useAuth();
@@ -224,5 +224,13 @@ export default function SettingsPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<SettingsSkeleton />}>
+      <SettingsContent />
+    </Suspense>
   );
 }
