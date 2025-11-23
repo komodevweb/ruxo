@@ -21,6 +21,10 @@ function Page() {
      const imageUrlRef = useRef<string | null>(null); // Ref to track current image URL
      const uploadTimestampRef = useRef<number>(0); // Track when image was uploaded to ensure we use latest
      
+     // Refs to track polling intervals for cleanup
+     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+     const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+     
      // Keep ref in sync with state to ensure we always have the latest URL
      useEffect(() => {
           imageUrlRef.current = imageUrl;
@@ -301,6 +305,28 @@ function Page() {
 
      // Convert size format (1280*720) to resolution format (720p)
      // No conversion needed - API uses resolution format directly
+     // Cleanup function to clear any active polling intervals
+     const cleanupPolling = () => {
+          console.log("🧹 Cleaning up polling intervals...");
+          if (pollIntervalRef.current) {
+               clearInterval(pollIntervalRef.current);
+               pollIntervalRef.current = null;
+               console.log("✅ Cleared poll interval");
+          }
+          if (pollTimeoutRef.current) {
+               clearTimeout(pollTimeoutRef.current);
+               pollTimeoutRef.current = null;
+               console.log("✅ Cleared poll timeout");
+          }
+     };
+
+     // Cleanup on component unmount
+     useEffect(() => {
+          return () => {
+               cleanupPolling();
+          };
+     }, []);
+
      const convertSizeToResolution = (sizeValue: string): string => {
           // If already in resolution format (480p, 720p, 1080p), return as is
           if (sizeValue === "480p" || sizeValue === "720p" || sizeValue === "1080p") {
@@ -565,7 +591,8 @@ function Page() {
                          if (!isGenerating) {
                               setIsGenerating(true);
                          }
-                         if (!isPolling) {
+                         if (!isPolling && !pollIntervalRef.current) {
+                              console.log("🔄 Resuming polling for running job:", runningJobId);
                               setIsPolling(true);
                               pollJobStatus(runningJobId);
                          }
@@ -591,7 +618,8 @@ function Page() {
                                    if (!isGenerating) {
                                         setIsGenerating(true);
                                    }
-                                   if (!isPolling) {
+                                   if (!isPolling && !pollIntervalRef.current) {
+                                        console.log("🔄 Resuming polling for job:", jobId);
                                         setIsPolling(true);
                                         pollJobStatus(jobId);
                                    }
@@ -602,6 +630,7 @@ function Page() {
                                    setProgress(100);
                                    setIsGenerating(false);
                                    setIsPolling(false);
+                                   cleanupPolling(); // Clean up any existing intervals
                                    // Clean up localStorage
                                    safeLocalStorage.removeItem(`job_start_${jobId}`);
                               } else if (currentJob.status === "failed") {
@@ -609,6 +638,7 @@ function Page() {
                                    setError(currentJob.error || "Video generation failed");
                                    setIsGenerating(false);
                                    setIsPolling(false);
+                                   cleanupPolling(); // Clean up any existing intervals
                                    // Clean up localStorage
                                    safeLocalStorage.removeItem(`job_start_${jobId}`);
                               }
@@ -859,6 +889,11 @@ function Page() {
                return;
           }
 
+          // CRITICAL: Clean up any existing polling intervals before starting new generation
+          console.log("🔄 Starting new generation - cleaning up old polling intervals");
+          cleanupPolling();
+          setIsPolling(false);
+
           // Set ref immediately to prevent double submission
           isSubmittingRef.current = true;
           setError(null);
@@ -1014,8 +1049,12 @@ function Page() {
           const token = getToken();
           if (!token) return;
 
-          let pollInterval: NodeJS.Timeout | null = null;
-          let timeoutId: NodeJS.Timeout | null = null;
+          // Check if polling is already active
+          if (pollIntervalRef.current || pollTimeoutRef.current) {
+               console.warn("⚠️ Polling already active, cleaning up before starting new poll");
+               cleanupPolling();
+          }
+
           const MAX_POLL_TIME = 10 * 60 * 1000; // 10 minutes total
           const POLL_INTERVAL = 3000; // 3 seconds
           const REQUEST_TIMEOUT = 10000; // 10 seconds per request
@@ -1045,20 +1084,24 @@ function Page() {
                               setIsGenerating(false);
                               setIsPolling(false);
                               isSubmittingRef.current = false; // Reset ref when completed
-                              if (pollInterval) clearInterval(pollInterval);
-                              if (timeoutId) clearTimeout(timeoutId);
+                              cleanupPolling(); // Use cleanup function
                               // Clean up localStorage
                               if (jobIdToPoll) {
                                    safeLocalStorage.removeItem(`job_start_${jobIdToPoll}`);
                               }
                               loadPreviousJobs();
+                              
+                              // Auto-refresh page after 2 seconds to ensure clean state for next generation
+                              setTimeout(() => {
+                                   console.log("✅ Generation complete - refreshing page for clean state");
+                                   window.location.reload();
+                              }, 2000);
                          } else if (data.status === "failed") {
                               setError(data.error || "Video generation failed");
                               setIsGenerating(false);
                               setIsPolling(false);
                               isSubmittingRef.current = false; // Reset ref on failure
-                              if (pollInterval) clearInterval(pollInterval);
-                              if (timeoutId) clearTimeout(timeoutId);
+                              cleanupPolling(); // Use cleanup function
                               // Clean up localStorage
                               if (jobIdToPoll) {
                                    safeLocalStorage.removeItem(`job_start_${jobIdToPoll}`);
@@ -1082,11 +1125,12 @@ function Page() {
 
           // Poll immediately, then every 3 seconds
           poll();
-          pollInterval = setInterval(poll, POLL_INTERVAL);
+          pollIntervalRef.current = setInterval(poll, POLL_INTERVAL);
+          console.log("✅ Started polling interval:", pollIntervalRef.current);
 
           // Overall timeout after 10 minutes
-          timeoutId = setTimeout(() => {
-               if (pollInterval) clearInterval(pollInterval);
+          pollTimeoutRef.current = setTimeout(() => {
+               cleanupPolling(); // Use cleanup function
                const currentStatus = jobStatus;
                if (currentStatus !== "completed" && currentStatus !== "failed") {
                     setError("Job is taking longer than expected. You can check back later or refresh the page to see the status.");
@@ -1097,6 +1141,7 @@ function Page() {
                     console.log("Polling timeout reached, but job may still be processing on the server");
                }
           }, MAX_POLL_TIME);
+          console.log("✅ Started polling timeout:", pollTimeoutRef.current);
      };
 
      // Handle drag and drop for images

@@ -6,7 +6,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/api";
 import { allImages } from "../../lib/gallery-images";
-import { trackViewContent } from "@/lib/facebookTracking";
 
 export default function ImagePage() {
      const { user, loading: authLoading } = useAuth();
@@ -118,13 +117,6 @@ export default function ImagePage() {
                requestIdleCallback(shuffleAndSetImages, { timeout: 1000 });
           } else {
                setTimeout(shuffleAndSetImages, 100);
-          }
-     }, []);
-     
-     // Track ViewContent event when page loads
-     useEffect(() => {
-          if (typeof window !== 'undefined') {
-               trackViewContent(window.location.href);
           }
      }, []);
 

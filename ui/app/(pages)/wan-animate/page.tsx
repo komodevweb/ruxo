@@ -763,6 +763,12 @@ function page() {
                          localStorage.removeItem(`job_start_${jobId}`);
                          // Reload previous jobs to include the new one
                          loadPreviousJobs();
+                         
+                         // Auto-refresh page after 2 seconds to ensure clean state for next generation
+                         setTimeout(() => {
+                              console.log("✅ Generation complete - refreshing page for clean state");
+                              window.location.reload();
+                         }, 2000);
                     } else if (data.status === "failed") {
                          setError(data.error || "Job failed");
                          setIsGenerating(false);
