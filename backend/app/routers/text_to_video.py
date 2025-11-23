@@ -46,8 +46,18 @@ class TextToVideoResponse(BaseModel):
 @router.get("/models")
 async def get_available_models():
     """
-    Get all available text-to-video models with their configurations.
+    Get all available text-to-video models with their configurations (cached in Redis).
     """
+    from app.utils.cache import get_cached, set_cached, cache_key
+    
+    cache_key_str = cache_key("cache", "text-to-video", "models")
+    
+    # Try cache first
+    cached = await get_cached(cache_key_str)
+    if cached is not None:
+        return cached
+    
+    # Cache miss - build models list
     models = []
     for model_name, config in MODEL_CONFIGS.items():
         models.append({
@@ -63,7 +73,13 @@ async def get_available_models():
             "default_resolution": config.default_resolution,
             "default_duration": config.default_duration,
         })
-    return {"models": models}
+    
+    result = {"models": models}
+    
+    # Cache for 24 hours (models rarely change)
+    await set_cached(cache_key_str, result, ttl=86400)
+    
+    return result
 
 
 @router.get("/calculate-credits")
@@ -488,10 +504,19 @@ async def get_text_to_video_status(
     session: AsyncSession = Depends(get_session)
 ):
     """
-    Get the status of a Text To Video job.
+    Get the status of a Text To Video job (cached for 10 seconds for fast polling).
     Polls WaveSpeed AI for the latest status and updates the database.
     """
+    from app.utils.cache import get_cached, set_cached, cache_key
+    
     logger.info(f"Status check request for job {job_id} from user {current_user.id}")
+    
+    cache_key_str = cache_key("cache", "job", str(job_id), "status")
+    
+    # Try cache first (short TTL for active jobs)
+    cached = await get_cached(cache_key_str)
+    if cached is not None:
+        return cached
     
     try:
         # Get render job from database
@@ -624,7 +649,7 @@ async def get_text_to_video_status(
             except Exception as retry_error:
                 logger.warning(f"Retry attempt failed for job {job_id}: {retry_error}")
         
-        return {
+        result = {
             "job_id": str(render_job.id),
             "status": render_job.status,
             "task_id": wavespeed_task_id,
@@ -633,6 +658,12 @@ async def get_text_to_video_status(
             "created_at": render_job.created_at.isoformat(),
             "updated_at": render_job.updated_at.isoformat()
         }
+        
+        # Cache result - short TTL for active jobs, longer for completed
+        ttl = 10 if render_job.status in ["pending", "running"] else 60
+        await set_cached(cache_key_str, result, ttl=ttl)
+        
+        return result
         
     except HTTPException:
         raise
@@ -651,6 +682,15 @@ async def list_text_to_video_jobs(
     limit: int = 20,
     offset: int = 0
 ):
+    """List user's text-to-video jobs (cached for 1 minute)."""
+    from app.utils.cache import get_cached, set_cached, cache_key
+    
+    cache_key_str = cache_key("cache", "user", str(current_user.id), "text-to-video", "jobs", str(limit), str(offset))
+    
+    # Try cache first
+    cached = await get_cached(cache_key_str)
+    if cached is not None:
+        return cached
     """
     List all Text To Video jobs for the current user.
     """
@@ -716,6 +756,11 @@ async def list_text_to_video_jobs(
             ],
             "total": len(jobs)
         }
+        
+        # Cache for 1 minute
+        await set_cached(cache_key_str, result, ttl=60)
+        
+        return result
         
     except Exception as e:
         logger.error(f"Error listing Text To Video jobs: {e}", exc_info=True)

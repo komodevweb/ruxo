@@ -285,8 +285,18 @@ def calculate_credit_cost(model_id: str, resolution: Optional[str] = None) -> fl
 @router.get("/models")
 async def get_available_models():
     """
-    Get available image generation models.
+    Get available image generation models (cached in Redis).
     """
+    from app.utils.cache import get_cached, set_cached
+    
+    cache_key = "cache:image:models"
+    
+    # Try to get from cache
+    cached = await get_cached(cache_key)
+    if cached is not None:
+        return cached
+    
+    # Cache miss - build models list
     models = []
     for model_id, config in IMAGE_MODELS.items():
         models.append({
@@ -308,7 +318,12 @@ async def get_available_models():
             "supports_image_to_image": config.get("supports_image_to_image", False)
         })
     
-    return {"models": models}
+    result = {"models": models}
+    
+    # Cache for 24 hours (models rarely change)
+    await set_cached(cache_key, result, ttl=86400)
+    
+    return result
 
 
 @router.get("/calculate-credits")

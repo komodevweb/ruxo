@@ -1,0 +1,7 @@
+
+# Backend environment files
+backend/.env
+
+
+# Frontend environment files
+ui/.env

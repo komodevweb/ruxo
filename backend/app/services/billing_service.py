@@ -46,8 +46,22 @@ class BillingService:
             logger.info(f"User {user.id} has active subscription {existing_subscription.stripe_subscription_id}, canceling it and creating new checkout for {plan_name}")
             
             try:
-                # Get or create Stripe customer
-                customer_id = existing_subscription.stripe_customer_id or await self._get_or_create_customer(user)
+                # Get or create Stripe customer (validates customer exists in Stripe)
+                if existing_subscription.stripe_customer_id:
+                    # Verify customer exists, create new one if it doesn't
+                    try:
+                        stripe.Customer.retrieve(existing_subscription.stripe_customer_id)
+                        customer_id = existing_subscription.stripe_customer_id
+                    except stripe.error.StripeError:
+                        # Customer doesn't exist, get or create a new one
+                        logger.warning(f"Customer {existing_subscription.stripe_customer_id} not found in Stripe. Creating new customer.")
+                        customer_id = await self._get_or_create_customer(user)
+                        # Update subscription with new customer ID
+                        existing_subscription.stripe_customer_id = customer_id
+                        self.session.add(existing_subscription)
+                        await self.session.commit()
+                else:
+                    customer_id = await self._get_or_create_customer(user)
             
                 # Cancel the existing subscription IMMEDIATELY (not at period end)
                 # This ensures users can only have one active subscription at a time
@@ -81,6 +95,18 @@ class BillingService:
                         detail=f"Failed to cancel existing subscription: {str(e)}"
                     )
                 
+                # Verify the price ID exists in Stripe before creating checkout
+                try:
+                    stripe.Price.retrieve(plan.stripe_price_id)
+                except stripe.error.InvalidRequestError as e:
+                    if "No such price" in str(e):
+                        logger.error(f"Price ID {plan.stripe_price_id} for plan '{plan.name}' does not exist in Stripe. Please update the price ID in the database.")
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Invalid price configuration for plan '{plan.display_name}'. Please contact support or update the plan's Stripe price ID in the database."
+                        )
+                    raise
+                
                 # Apply 40% discount coupon for yearly plans
                 checkout_params = {
                     "payment_method_types": ["card"],
@@ -113,10 +139,23 @@ class BillingService:
                 
                 # Create checkout session for the new plan
                 # Stripe will handle the upgrade and proration
-                checkout_session = stripe.checkout.Session.create(**checkout_params)
-                
-                logger.info(f"Checkout session created for upgrade: {checkout_session.id}")
-                return checkout_session.url
+                try:
+                    checkout_session = stripe.checkout.Session.create(**checkout_params)
+                    logger.info(f"Checkout session created for upgrade: {checkout_session.id}")
+                    return checkout_session.url
+                except stripe.error.InvalidRequestError as e:
+                    if "No such price" in str(e):
+                        logger.error(f"Price ID {plan.stripe_price_id} for plan '{plan.name}' does not exist in Stripe.")
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Invalid price configuration for plan '{plan.display_name}'. The Stripe price ID '{plan.stripe_price_id}' does not exist. Please update the plan's price ID in the database."
+                        )
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Failed to create upgrade checkout: {str(e)}"
+                    )
+            except HTTPException:
+                raise
             except stripe.error.StripeError as e:
                 logger.error(f"Stripe error during upgrade checkout creation: {e}")
                 raise HTTPException(
@@ -167,6 +206,18 @@ class BillingService:
         # Get or create Stripe customer
         customer_id = await self._get_or_create_customer(user)
         
+        # Validate price ID exists in Stripe before creating checkout
+        try:
+            stripe.Price.retrieve(plan.stripe_price_id)
+        except stripe.error.InvalidRequestError as e:
+            if "No such price" in str(e):
+                logger.error(f"Price ID {plan.stripe_price_id} for plan '{plan.name}' does not exist in Stripe. Please update the price ID in the database.")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Invalid price configuration for plan '{plan.display_name}'. The Stripe price ID '{plan.stripe_price_id}' does not exist. Please update the plan's price ID in the database."
+                )
+            raise
+        
         # Apply 40% discount coupon for yearly plans
         checkout_params = {
             "payment_method_types": ["card"],
@@ -186,11 +237,26 @@ class BillingService:
         if plan.interval == "year":
             checkout_params["discounts"] = [{"coupon": "ruxo40"}]
         
-        checkout_session = stripe.checkout.Session.create(**checkout_params)
-        return checkout_session.url
+        try:
+            checkout_session = stripe.checkout.Session.create(**checkout_params)
+            return checkout_session.url
+        except stripe.error.InvalidRequestError as e:
+            if "No such price" in str(e):
+                logger.error(f"Price ID {plan.stripe_price_id} for plan '{plan.name}' does not exist in Stripe.")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Invalid price configuration for plan '{plan.display_name}'. The Stripe price ID '{plan.stripe_price_id}' does not exist. Please update the plan's price ID in the database."
+                )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to create checkout session: {str(e)}"
+            )
 
     async def _get_or_create_customer(self, user: UserProfile) -> str:
         """Get existing Stripe customer or create new one."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         # Check if user has existing subscription(s) - handle multiple subscriptions
         result = await self.session.execute(
             select(Subscription).where(Subscription.user_id == user.id)
@@ -210,13 +276,31 @@ class BillingService:
                     existing_sub = sub
         
         if existing_sub and existing_sub.stripe_customer_id:
-            return existing_sub.stripe_customer_id
+            # Verify the customer actually exists in Stripe
+            try:
+                customer = stripe.Customer.retrieve(existing_sub.stripe_customer_id)
+                logger.info(f"Found existing Stripe customer {existing_sub.stripe_customer_id} for user {user.id}")
+                return existing_sub.stripe_customer_id
+            except stripe.error.StripeError as e:
+                # Customer doesn't exist in Stripe, create a new one
+                logger.warning(f"Customer {existing_sub.stripe_customer_id} not found in Stripe: {e}. Creating new customer.")
+                # Update the subscription record with the new customer ID
+                new_customer = stripe.Customer.create(
+                    email=user.email,
+                    metadata={"user_id": str(user.id)}
+                )
+                existing_sub.stripe_customer_id = new_customer.id
+                self.session.add(existing_sub)
+                await self.session.commit()
+                logger.info(f"Created new Stripe customer {new_customer.id} and updated subscription {existing_sub.id}")
+                return new_customer.id
         
         # Create new Stripe customer with user_id in metadata
         customer = stripe.Customer.create(
             email=user.email,
             metadata={"user_id": str(user.id)}
         )
+        logger.info(f"Created new Stripe customer {customer.id} for user {user.id}")
         return customer.id
 
     async def create_portal_session(self, user: UserProfile) -> str:
@@ -288,6 +372,8 @@ class BillingService:
                 await self._handle_invoice_payment_succeeded(data)
             elif event_type == "invoice.payment_failed":
                 await self._handle_invoice_payment_failed(data)
+            elif event_type == "charge.refunded":
+                await self._handle_charge_refunded(data)
             else:
                 logger.info(f"Unhandled webhook event type: {event_type}")
         except Exception as e:
@@ -501,6 +587,77 @@ class BillingService:
                 subscription.status = "past_due"
                 self.session.add(subscription)
                 await self.session.commit()
+
+    async def _handle_charge_refunded(self, charge_data):
+        """Handle charge refund - wipe user credits and cancel subscription."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        charge_id = charge_data.get("id")
+        customer_id = charge_data.get("customer")
+        
+        logger.info(f"Processing charge.refunded webhook: charge_id={charge_id}, customer_id={customer_id}")
+        
+        if not customer_id:
+            logger.warning(f"charge.refunded: No customer_id in charge data for charge {charge_id}")
+            return
+        
+        # Find subscription by customer_id
+        result = await self.session.execute(
+            select(Subscription).where(
+                Subscription.stripe_customer_id == customer_id,
+                Subscription.status == "active"
+            )
+        )
+        subscription = result.scalar_one_or_none()
+        
+        if not subscription:
+            logger.warning(f"charge.refunded: No active subscription found for customer {customer_id}")
+            return
+        
+        user_id = subscription.user_id
+        logger.info(f"charge.refunded: Found active subscription {subscription.stripe_subscription_id} for user {user_id}")
+        
+        # Wipe all user credits
+        wallet = await self.credits_service.get_wallet(user_id)
+        if wallet.balance_credits > 0:
+            old_balance = wallet.balance_credits
+            # Spend all remaining credits to bring balance to 0
+            await self.credits_service.spend_credits(
+                user_id=user_id,
+                amount=wallet.balance_credits,
+                reason="charge_refunded",
+                metadata={
+                    "charge_id": charge_id,
+                    "subscription_id": str(subscription.id),
+                    "old_balance": old_balance,
+                    "refund_reason": "charge_refunded_webhook"
+                }
+            )
+            logger.info(f"charge.refunded: Wiped all credits ({old_balance}) for user {user_id}")
+        else:
+            logger.info(f"charge.refunded: User {user_id} already has 0 credits")
+        
+        # Cancel subscription in Stripe and database
+        try:
+            # Cancel the subscription in Stripe immediately
+            stripe.Subscription.delete(subscription.stripe_subscription_id)
+            logger.info(f"charge.refunded: Canceled subscription {subscription.stripe_subscription_id} in Stripe")
+        except stripe.error.StripeError as stripe_error:
+            # If subscription is already canceled or doesn't exist, just update our database
+            if stripe_error.code == "resource_missing":
+                logger.info(f"charge.refunded: Subscription {subscription.stripe_subscription_id} already canceled in Stripe. Updating database only.")
+            else:
+                logger.warning(f"charge.refunded: Stripe error canceling subscription {subscription.stripe_subscription_id}: {stripe_error}. Updating database only.")
+        except Exception as e:
+            logger.error(f"charge.refunded: Unexpected error canceling subscription {subscription.stripe_subscription_id}: {e}")
+        
+        # Update subscription status in database
+        subscription.status = "canceled"
+        self.session.add(subscription)
+        await self.session.commit()
+        
+        logger.info(f"charge.refunded: Successfully processed refund for user {user_id} - credits wiped and subscription canceled")
 
     async def _process_subscription(self, stripe_subscription: dict, user_id: uuid.UUID):
         """Process subscription: create/update subscription record and add credits.

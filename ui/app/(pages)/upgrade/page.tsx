@@ -21,7 +21,7 @@ interface Plan {
 }
 
 function page() {
-     const { user, loading: authLoading } = useAuth();
+     const { user, loading: authLoading, checkAuth } = useAuth();
      const router = useRouter();
      
      // Start with yearly by default
@@ -36,8 +36,34 @@ function page() {
           fetchPlans();
      }, []);
      
-     // Always start with yearly - removed auto-switching based on user plan
-     // Users can manually toggle if they want to see monthly plans
+     // Refresh user data when page loads to ensure we have latest subscription info
+     useEffect(() => {
+          if (!authLoading && user) {
+               // Force refresh user data to get latest plan info
+               checkAuth();
+          }
+     }, []); // Only run once on mount
+     
+     // Auto-switch to yearly view if user has yearly plan
+     useEffect(() => {
+          if (user?.plan_name) {
+               // Use explicit interval or fallback parsing
+               let isYearly = false;
+               if (user.plan_interval) {
+                    isYearly = user.plan_interval === 'year';
+               } else {
+                    const planNameLower = user.plan_name.toLowerCase();
+                    isYearly = planNameLower.includes('yearly') || 
+                               planNameLower.includes('annual') || 
+                               planNameLower.includes('_yearly') ||
+                               planNameLower.endsWith('yearly');
+               }
+               
+               if (isYearly && Monthly !== 'yearly') {
+                    setMonthly('yearly');
+               }
+          }
+     }, [user?.plan_name, user?.plan_interval, Monthly]);
 
      const fetchPlans = async () => {
           try {
@@ -300,40 +326,90 @@ function page() {
           : 0;
      
      // Get current plan interval if user has subscription
-     const currentPlanInterval = hasActiveSubscription && user.plan_name
-          ? user.plan_name.includes('_yearly') ? 'year' : 'month'
-          : null;
+     // Use explicit plan_interval from backend if available, otherwise fallback to name parsing
+     const getCurrentPlanInterval = (): 'year' | 'month' | null => {
+          if (!hasActiveSubscription || !user?.plan_name) {
+               return null;
+          }
+          
+          // Debug: Log everything we know about the plan
+          console.log('[Upgrade Page Debug] User Data:', {
+               plan_name: user.plan_name,
+               plan_interval: user.plan_interval, // This is the new field
+               credits: user.credits_per_month
+          });
+          
+          // Check explicit interval property first (new backend feature)
+          if (user.plan_interval) {
+               const interval = user.plan_interval === 'year' ? 'year' : 'month';
+               console.log('[Upgrade Page Debug] Detected via plan_interval:', interval);
+               return interval;
+          }
+          
+          // Fallback to name parsing for backward compatibility
+          const planNameLower = user.plan_name.toLowerCase();
+          if (planNameLower.includes('yearly') || 
+              planNameLower.includes('annual') || 
+              planNameLower.includes('_yearly') ||
+              planNameLower.endsWith('yearly')) {
+               console.log('[Upgrade Page Debug] Detected via name parsing: year');
+               return 'year';
+          }
+          console.log('[Upgrade Page Debug] Detected via name parsing: month');
+          return 'month';
+     };
+     
+     const currentPlanInterval = getCurrentPlanInterval();
 
      // Determine if plan is upgrade, downgrade, or current
      const getPlanStatus = (plan: Plan) => {
-          if (!hasActiveSubscription) {
+          if (!hasActiveSubscription || !user?.plan_name) {
                return { type: 'new', canSelect: true };
           }
           
           const planTier = getPlanTier(plan.name);
           const planInterval = plan.interval;
           
-          // If user has yearly, they can only upgrade to yearly plans
+          // Get user's plan key and interval
+          const userPlanKey = getPlanKeyFromDisplayName(user.plan_name);
+          
+          // If user has yearly subscription, they can only see yearly plans
           if (currentPlanInterval === 'year' && planInterval !== 'year') {
                return { type: 'incompatible', canSelect: false };
           }
           
-          // If user has monthly, they can upgrade to yearly or monthly
+          // If user has monthly subscription, they can see both monthly and yearly
+          // (yearly would be an upgrade)
+          
+          // Check if this is the exact same plan (same tier AND same interval)
+          const isExactMatch = userPlanKey === plan.name.split('_')[0] && 
+                              planInterval === currentPlanInterval &&
+                              currentPlanInterval !== null;
+          
+          if (isExactMatch) {
+               // This is the user's current plan
+               return { type: 'current', canSelect: false };
+          }
+          
+          // Different plans - check tier
           if (planTier > currentPlanTier) {
+               // Higher tier plan - upgrade available
                return { type: 'upgrade', canSelect: true };
           } else if (planTier < currentPlanTier) {
+               // Lower tier plan - downgrade (not available)
                return { type: 'downgrade', canSelect: false };
           } else {
-               // Same tier - check if it's the same plan
-               // Compare plan keys (starter, pro, etc.) since user.plan_name is now display_name
-               const userPlanKey = getPlanKeyFromDisplayName(user.plan_name || '');
-               const currentPlanKey = plan.name.split('_')[0];
-               if (userPlanKey === currentPlanKey && planInterval === currentPlanInterval) {
-                    return { type: 'current', canSelect: false };
-               }
-               // Same tier but different interval (e.g., monthly vs yearly)
-               if (planInterval === 'year' && currentPlanInterval === 'month') {
-                    return { type: 'upgrade', canSelect: true }; // Yearly is considered upgrade
+               // Same tier but different interval
+               if (userPlanKey === plan.name.split('_')[0]) {
+                    // Same plan type, different interval
+                    if (planInterval === 'month' && currentPlanInterval === 'year') {
+                         // User has yearly, viewing monthly -> incompatible
+                         return { type: 'incompatible', canSelect: false };
+                    }
+                    if (planInterval === 'year' && currentPlanInterval === 'month') {
+                         // User has monthly, viewing yearly -> upgrade
+                         return { type: 'upgrade', canSelect: true };
+                    }
                }
                return { type: 'same_tier', canSelect: false };
           }

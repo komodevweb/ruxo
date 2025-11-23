@@ -37,3 +37,8 @@ b2sdk==2.1.0
 
 # Task Scheduling
 apscheduler==3.10.4
+
+# Redis
+redis==5.0.1
+hiredis==2.3.2
+async-timeout==4.0.3

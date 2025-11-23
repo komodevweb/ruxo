@@ -153,9 +153,14 @@ def setup_scheduler() -> AsyncIOScheduler:
 async def lifespan(app) -> AsyncGenerator:
     """
     FastAPI lifespan context manager.
-    Starts the scheduler when the app starts and stops it when the app shuts down.
+    Starts the scheduler and Redis when the app starts and stops them when the app shuts down.
     """
     global scheduler
+    
+    # Startup: Initialize Redis
+    from app.services.redis_service import redis_service
+    logger.info("Initializing Redis...")
+    await redis_service.initialize()
     
     # Startup: Start the scheduler
     logger.info("Starting background scheduler...")
@@ -170,6 +175,11 @@ async def lifespan(app) -> AsyncGenerator:
     if scheduler and scheduler.running:
         scheduler.shutdown(wait=True)
     logger.info("Background scheduler stopped")
+    
+    # Shutdown: Close Redis connection
+    logger.info("Closing Redis connection...")
+    await redis_service.close()
+    logger.info("Redis connection closed")
 
 
 def get_scheduler() -> AsyncIOScheduler:

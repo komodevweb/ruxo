@@ -2,7 +2,23 @@ import Footer from "./components/Footer";
 import FeaturedModels from "./components/FeaturedModels";
 import ImageGallery from "./components/ImageGallery";
 import HomepageCards from "./components/HomepageCards";
+import type { Metadata } from "next";
 
+export const metadata: Metadata = {
+  title: "Ruxo - AI Photo & Video Generation - Where imagination turns real",
+  description: "Turn your ideas into amazing videos, images, and visuals with Ruxo's AI creation platform. Generate stunning content using the latest AI models including Sora 2 Pro, G Veo 3.1, and more.",
+  keywords: "AI video generation, AI image generation, text to video, text to image, AI creation platform, video AI, image AI",
+  openGraph: {
+    title: "Ruxo - AI Photo & Video Generation",
+    description: "Create stunning AI-generated photos and videos with Ruxo's powerful AI creation platform.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Ruxo - AI Photo & Video Generation",
+    description: "Create stunning AI-generated photos and videos with Ruxo's powerful AI creation platform.",
+  },
+};
 
 export default function Home() {
   return (
@@ -17,7 +33,7 @@ export default function Home() {
         <div className="max-w-[1320px] px-5 mx-auto">
           <div className="text-center">
             <span className="text-[10px] font-medium leading-2.5 text-black py-1 px-[11px] inline-block bg-blue-1000 rounded-full">AI Creation Platform</span>
-            <h1 className="md:text-[68px] text-[38px] text-white font-medium md:mt-5 mt-4 mb-4 leading-[120%] tracking-[-1px]">Create Anything You Imagine</h1>
+            <h1 className="md:text-[68px] text-[38px] text-white font-medium md:mt-5 mt-4 mb-4 leading-[120%] tracking-[-1px]">Where imagination turns real</h1>
             <p className="md:text-base text-sm font-medium leading-[120%] text-white/60">Turn your ideas into amazing videos, images, and visuals. Just type what you want and watch the magic happen.</p>
           </div>
           <div className="md:mt-20 mt-12">

@@ -1,5 +1,22 @@
 import Footer from "@/app/components/Footer"
 import Link from "next/link"
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy - Ruxo - Your Data Protection & Privacy",
+  description: "Read Ruxo's Privacy Policy to understand how we collect, use, and protect your personal information and data.",
+  keywords: "privacy policy, data protection, user privacy, Ruxo privacy",
+  openGraph: {
+    title: "Privacy Policy - Ruxo",
+    description: "Read Ruxo's Privacy Policy to understand how we collect, use, and protect your personal information.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Privacy Policy - Ruxo",
+    description: "Read Ruxo's Privacy Policy to understand how we protect your data.",
+  },
+};
 
 function page() {
      return (

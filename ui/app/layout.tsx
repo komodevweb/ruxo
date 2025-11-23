@@ -4,8 +4,8 @@ import Header from "./components/Header";
 import { AuthProvider } from "@/contexts/AuthContext";
 
 export const metadata: Metadata = {
-  title: "Ruxo - AI Photo & Video Generation",
-  description: "Create stunning AI-generated photos and videos",
+  title: "Ruxo - Where imagination turns real",
+  description: "Where imagination turns real",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -38,7 +38,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased bg-black-1100 font-inter">
+      <body className="antialiased bg-black-1100 font-inter" suppressHydrationWarning>
         <AuthProvider>
           <Header></Header>
           {children}

@@ -29,7 +29,7 @@ export default function LoginEmailPage() {
     const { error } = await signIn(email, password);
 
     if (error) {
-      setError(error.message);
+      setError(error);
       setLoading(false);
     } else {
       router.push("/");
