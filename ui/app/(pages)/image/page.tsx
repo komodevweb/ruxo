@@ -800,16 +800,33 @@ export default function ImagePage() {
                                                   return;
                                              }
 
+                                             // Clear image from frontend immediately when generation starts
+                                             // This allows user to upload new image right away
+                                             const currentImageFile = imageFile;
+                                             const currentImageUrl = imageUrlRef.current || imageUrl;
+                                             if (mode === "image-to-image") {
+                                                  setImageFile(null);
+                                                  setImagePreview(null);
+                                                  setImageUrl(null);
+                                                  imageUrlRef.current = null;
+                                                  imageUploadTimestampRef.current = 0;
+                                                  // Clear the file input field
+                                                  const imageInput = document.querySelector('input[type="file"][accept*="image"]') as HTMLInputElement;
+                                                  if (imageInput) {
+                                                       imageInput.value = '';
+                                                  }
+                                             }
+
                                              // Upload image to Backblaze if we have a file but no URL yet
-                                             let finalImageUrl = imageUrlRef.current || imageUrl;
+                                             let finalImageUrl = currentImageUrl;
                                              
-                                             if (mode === "image-to-image" && imageFile && !finalImageUrl) {
+                                             if (mode === "image-to-image" && currentImageFile && !finalImageUrl) {
                                                   console.log("📤 Uploading image to Backblaze before generation...");
                                                   setImageUploading(true);
                                                   
                                                   try {
                                                        const uploadStartTime = Date.now();
-                                                       const url = await uploadFileToBackblaze(imageFile);
+                                                       const url = await uploadFileToBackblaze(currentImageFile);
                                                        
                                                        if (url) {
                                                             // Set ref FIRST (synchronous, immediate)
@@ -920,7 +937,9 @@ export default function ImagePage() {
                                    className={clsx(
                                         "flex items-center gap-2 text-sm font-bold py-2.5 px-5 rounded-xl transition-all duration-300 shadow-3xl hover:shadow-7xl hover:-translate-y-0.5 bg1 text-black",
                                         // Only show disabled styling for logged in users when fields are missing
-                                        user && (isGenerating || imageUploading || !prompt.trim() || !selectedModel || (mode === "image-to-image" && !imageFile && !imageUrl)) && "opacity-50 cursor-not-allowed"
+                                        user && (isGenerating || imageUploading || !prompt.trim() || !selectedModel || (mode === "image-to-image" && !imageFile && !imageUrl)) 
+                                             ? "cursor-not-allowed" 
+                                             : ""
                                    )}
                               >
                                    {(() => {

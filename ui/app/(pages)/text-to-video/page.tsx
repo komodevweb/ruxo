@@ -631,9 +631,10 @@ function page() {
     ${sidebarOpen ? "left-0" : "-left-full"} 
     lg:left-0 lg:top-[72px] top-0 lg:w-[301px] w-full flex flex-col justify-between 
     lg:h-[calc(100vh_-_72px)] h-screen lg:bottom-auto bottom-0 
-    border-r border-gray-1300 lg:py-8 pt-[68px] pb-4 px-4 sidebar-bg
+    border-r border-gray-1300 lg:py-8 pt-[68px] px-4 sidebar-bg
     transition-all duration-300 overflow-y-auto scroll-smooth
-   `}>
+    lg:pb-8 pb-20
+   `} style={{ paddingBottom: 'max(5rem, calc(1rem + env(safe-area-inset-bottom, 0px)))' }}>
                          {/* Mobile-only close button */}
                          <button
                               onClick={() => setSidebarOpen(false)}
@@ -837,7 +838,7 @@ function page() {
                                    </div>
                               )}
                          </div>
-                         <div className="text-center">
+                         <div className="text-center lg:pb-0" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))' }}>
                               {error && (
                                    <div className="mb-4 p-3 bg-red-500/20 border border-red-500 rounded-lg">
                                         <p className="text-xs text-red-400">{error}</p>
@@ -859,7 +860,12 @@ function page() {
                                                   }
                                              }}
                                              disabled={isDisabled}
-                                             className="md:text-sm text-xs w-full text-center font-bold leading-[120%] text-black inline-flex items-center justify-center gap-2 py-[11.5px] px-3.5 shadow-3xl bg1 rounded-xl hover:shadow-7xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden" 
+                                             className={clsx(
+                                                  "md:text-sm text-xs w-full text-center font-bold leading-[120%] text-black inline-flex items-center justify-center gap-2 py-[11.5px] px-3.5 shadow-3xl bg1 rounded-xl transition-all duration-300 relative overflow-hidden",
+                                                  isDisabled 
+                                                       ? "cursor-not-allowed" 
+                                                       : "hover:shadow-7xl"
+                                             )} 
                                         >
                                              {isLoading && (
                                                   <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
@@ -888,7 +894,7 @@ function page() {
                               </div>
                          ) : previousJobs.length > 0 ? (
                               <div className="w-full max-w-[1320px] mx-auto">
-                                   <div className="lg:hidden block mb-6 px-5">
+                                   <div className="lg:hidden block mb-6 px-5" style={{ paddingBottom: 'max(1.5rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))' }}>
                                         <div className="text-center mb-6">
                                              <div className="flex gap-2 items-center justify-center mb-2">
                                                   <span className="text-[10px] font-medium text-black inline-block py-0.5 px-[7px] bg-blue-1000 rounded-xl">NEW</span>
@@ -922,7 +928,7 @@ function page() {
                                         </div>
                                         <h2 className="md:text-5xl text-[38px] font-medium text-white leading-[120%] my-4 tracking-[-1px]">Turn Text Into Video</h2>
                                         <p className="md:text-base text-sm font-medium leading-[120%] text-white/60">Turn text into high-impact creative videos powered by the latest AI models.</p>
-                                        <div className="lg:hidden block mt-12">
+                                        <div className="lg:hidden block mt-12" style={{ paddingBottom: 'max(1.5rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))' }}>
                                              <button 
                                                   onClick={() => setSidebarOpen(true)} 
                                                   className="md:text-sm text-xs w-full text-center font-bold leading-[120%] text-black inline-block py-[11.5px] px-3.5 shadow-3xl bg1 rounded-xl hover:shadow-7xl transition-all duration-300" 

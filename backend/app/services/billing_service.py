@@ -40,10 +40,36 @@ class BillingService:
         )
         existing_subscription = result.scalar_one_or_none()
         
-        # If user has an active subscription, cancel it IMMEDIATELY before creating new checkout
-        # Users can only have one active subscription at a time
+        # If user has an active subscription, handle upgrade/downgrade
+        # SECURITY: Do NOT cancel admin subscriptions (manually granted) - they should use portal
+        # Only cancel real Stripe subscriptions, and only if they're upgrading/downgrading to a different plan
         if existing_subscription:
-            logger.info(f"User {user.id} has active subscription {existing_subscription.stripe_subscription_id}, canceling it and creating new checkout for {plan_name}")
+            # Check if this is an admin subscription (manually granted, starts with "admin_")
+            is_admin_subscription = existing_subscription.stripe_subscription_id.startswith("admin_")
+            
+            # Check if user is trying to select the same plan they already have
+            current_plan_key = existing_subscription.plan_name.split('_')[0]  # e.g., "pro" from "pro_monthly"
+            new_plan_key = plan_name.split('_')[0]  # e.g., "pro" from "pro_monthly"
+            is_same_plan = current_plan_key == new_plan_key
+            
+            if is_admin_subscription:
+                # Admin subscriptions should use customer portal, not checkout
+                logger.warning(f"User {user.id} has admin subscription {existing_subscription.stripe_subscription_id}. Admin subscriptions should be managed via portal, not checkout.")
+                raise HTTPException(
+                    status_code=400,
+                    detail="You have a manually granted subscription. Please use the 'Manage Subscription' button to modify your plan, or contact support."
+                )
+            
+            if is_same_plan:
+                # User is trying to subscribe to the same plan they already have
+                logger.info(f"User {user.id} already has plan {plan_name}. Redirecting to customer portal.")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"You already have the {plan.display_name} plan. Use 'Manage Subscription' to view or modify your subscription."
+                )
+            
+            # User is upgrading/downgrading to a different plan
+            logger.info(f"User {user.id} has active subscription {existing_subscription.stripe_subscription_id}, upgrading to {plan_name}")
             
             try:
                 # Get or create Stripe customer (validates customer exists in Stripe)
@@ -63,36 +89,58 @@ class BillingService:
                 else:
                     customer_id = await self._get_or_create_customer(user)
             
-                # Cancel the existing subscription IMMEDIATELY (not at period end)
-                # This ensures users can only have one active subscription at a time
+                # For upgrades/downgrades, use Stripe's subscription modification instead of canceling
+                # This preserves the subscription and just changes the plan
                 try:
-                    stripe.Subscription.delete(existing_subscription.stripe_subscription_id)
-                    # Update status in our database immediately
-                    existing_subscription.status = "canceled"
+                    # Retrieve the current subscription from Stripe
+                    stripe_subscription = stripe.Subscription.retrieve(existing_subscription.stripe_subscription_id)
+                    
+                    # Update the subscription to the new plan (Stripe handles proration)
+                    updated_subscription = stripe.Subscription.modify(
+                        existing_subscription.stripe_subscription_id,
+                        items=[{
+                            'id': stripe_subscription['items']['data'][0].id,
+                            'price': plan.stripe_price_id,
+                        }],
+                        proration_behavior='always_invoice',  # Charge immediately for prorated amount
+                    )
+                    
+                    logger.info(f"Updated subscription {existing_subscription.stripe_subscription_id} to plan {plan_name} via Stripe API")
+                    
+                    # Update our database to reflect the new plan
+                    existing_subscription.plan_id = plan.id
+                    existing_subscription.plan_name = plan.name
                     existing_subscription.updated_at = datetime.utcnow()
                     self.session.add(existing_subscription)
                     await self.session.commit()
-                    logger.info(f"Immediately canceled existing subscription {existing_subscription.stripe_subscription_id} for user {user.id}")
-                except stripe.error.StripeError as e:
+                    
+                    # Return the customer portal URL instead of checkout URL
+                    # User should use portal to manage their updated subscription
+                    portal_session = stripe.billing_portal.Session.create(
+                        customer=customer_id,
+                        return_url=f"{settings.FRONTEND_URL}/upgrade",
+                    )
+                    return portal_session.url
+                    
+                except stripe.error.InvalidRequestError as e:
                     error_msg = str(e)
-                    # If subscription is already canceled or doesn't exist, just update our database
-                    if "No such subscription" in error_msg or "already been deleted" in error_msg:
-                        logger.info(f"Subscription {existing_subscription.stripe_subscription_id} already canceled in Stripe. Updating database only.")
-                        existing_subscription.status = "canceled"
-                        existing_subscription.updated_at = datetime.utcnow()
-                        self.session.add(existing_subscription)
-                        await self.session.commit()
-                    else:
-                        logger.error(f"Error canceling subscription {existing_subscription.stripe_subscription_id}: {e}")
+                    if "No such subscription" in error_msg:
+                        # Subscription doesn't exist in Stripe, but exists in our DB
+                        # This can happen with admin subscriptions or deleted subscriptions
+                        logger.warning(f"Subscription {existing_subscription.stripe_subscription_id} not found in Stripe. Cannot upgrade via Stripe API.")
                         raise HTTPException(
                             status_code=400,
-                            detail=f"Failed to cancel existing subscription: {str(e)}"
+                            detail="Your subscription cannot be modified through checkout. Please contact support or use the customer portal."
                         )
-                except Exception as e:
-                    logger.error(f"Unexpected error canceling subscription {existing_subscription.stripe_subscription_id}: {e}")
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Failed to cancel existing subscription: {str(e)}"
+                        detail=f"Failed to update subscription: {str(e)}"
+                    )
+                except stripe.error.StripeError as e:
+                    logger.error(f"Stripe error updating subscription {existing_subscription.stripe_subscription_id}: {e}")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Failed to update subscription: {str(e)}"
                     )
                 
                 # Verify the price ID exists in Stripe before creating checkout

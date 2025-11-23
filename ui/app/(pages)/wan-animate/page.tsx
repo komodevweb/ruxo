@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import clsx from 'clsx';
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/api";
@@ -515,15 +516,39 @@ function page() {
           setError(null);
           setOutputUrl(null);
           setJobStatus(null);
+          
+          // Clear image and video from frontend immediately when generation starts
+          // This allows user to upload new files right away
+          const currentImageFile = imageFile;
+          const currentVideoFile = videoFile;
+          const currentImageUrl = imageUrlRef.current || imageUrl;
+          const currentVideoUrl = videoUrlRef.current || videoUrl;
+          setImageFile(null);
+          setImagePreview(null);
+          setImageUrl(null);
+          setVideoFile(null);
+          setVideoPreview(null);
+          setVideoUrl(null);
+          imageUrlRef.current = null;
+          videoUrlRef.current = null;
+          imageUploadTimestampRef.current = 0;
+          videoUploadTimestampRef.current = 0;
+          // Clear the file input fields
+          if (imageInputRef.current) {
+               imageInputRef.current.value = '';
+          }
+          if (videoInputRef.current) {
+               videoInputRef.current.value = '';
+          }
 
           try {
                // Upload both files in parallel if needed
-               let finalImageUrl = imageUrlRef.current || imageUrl;
-               let finalVideoUrl = videoUrlRef.current || videoUrl;
+               let finalImageUrl = currentImageUrl;
+               let finalVideoUrl = currentVideoUrl;
                
                // Check if we need to upload either file
-               const needImageUpload = imageFile && !finalImageUrl;
-               const needVideoUpload = videoFile && !finalVideoUrl;
+               const needImageUpload = currentImageFile && !finalImageUrl;
+               const needVideoUpload = currentVideoFile && !finalVideoUrl;
                
                if (needImageUpload || needVideoUpload) {
                     console.log("📤 Uploading files to Backblaze before generation...");
@@ -535,7 +560,7 @@ function page() {
                          const uploadPromises = [];
                          
                          if (needImageUpload) {
-                              const imageUploadPromise = uploadFileToBackblaze(imageFile, "image")
+                              const imageUploadPromise = uploadFileToBackblaze(currentImageFile, "image")
                                    .then((url) => {
                                         if (url) {
                                              const uploadStartTime = Date.now();
@@ -556,7 +581,7 @@ function page() {
                          }
                          
                          if (needVideoUpload) {
-                              const videoUploadPromise = uploadFileToBackblaze(videoFile, "video")
+                              const videoUploadPromise = uploadFileToBackblaze(currentVideoFile, "video")
                                    .then((url) => {
                                         if (url) {
                                              const uploadStartTime = Date.now();
@@ -1018,9 +1043,21 @@ function page() {
                                         <button 
                                              onClick={buttonConfig.action}
                                              disabled={isDisabled}
-                                             className="md:text-sm text-xs w-full text-center font-bold leading-[120%] text-black inline-block py-[11.5px] px-3.5 shadow-3xl bg1 rounded-xl hover:shadow-7xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed" 
+                                             className={clsx(
+                                                  "md:text-sm text-xs w-full text-center font-bold leading-[120%] text-black inline-block py-[11.5px] px-3.5 shadow-3xl bg1 rounded-xl transition-all duration-300 relative overflow-hidden",
+                                                  isDisabled 
+                                                       ? "cursor-not-allowed" 
+                                                       : "hover:shadow-7xl"
+                                             )}
                                         >
-                                             {buttonConfig.text}
+                                             {(isGenerating || imageUploading || videoUploading) ? (
+                                                  <>
+                                                       <span className="relative z-10">{buttonConfig.text}</span>
+                                                       <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+                                                  </>
+                                             ) : (
+                                                  buttonConfig.text
+                                             )}
                                         </button>
                                    );
                               })()}

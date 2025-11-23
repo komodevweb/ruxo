@@ -8,7 +8,7 @@ import { getToken, apiClient } from "@/lib/api";
 import VideoGallery from "@/app/components/VideoGallery";
 import { allImages } from "../../lib/gallery-images";
 
-function page() {
+function Page() {
      const { user, loading: authLoading } = useAuth();
      const router = useRouter();
      const [prompt, setPrompt] = useState("");
@@ -83,33 +83,92 @@ function page() {
           return shuffled;
      }
 
+     // Safe localStorage helpers (handle cases where localStorage might not be available)
+     const safeLocalStorage = {
+          getItem: (key: string): string | null => {
+               try {
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                         return window.localStorage.getItem(key);
+                    }
+               } catch (error) {
+                    console.warn("localStorage.getItem failed:", error);
+               }
+               return null;
+          },
+          setItem: (key: string, value: string): void => {
+               try {
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                         window.localStorage.setItem(key, value);
+                    }
+               } catch (error) {
+                    console.warn("localStorage.setItem failed:", error);
+               }
+          },
+          removeItem: (key: string): void => {
+               try {
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                         window.localStorage.removeItem(key);
+                    }
+               } catch (error) {
+                    console.warn("localStorage.removeItem failed:", error);
+               }
+          }
+     };
+
      // Initialize gallery images with aspect ratios
      const MAX_GALLERY_IMAGES = 12;
      const [galleryImages, setGalleryImages] = useState<Array<{ id: number; src: string; aspect: string }>>(() => {
           // Fixed initial state for SSR
-          return allImages.slice(0, MAX_GALLERY_IMAGES).map((src, index) => ({
-               id: index + 1,
-               src,
-               aspect: aspectRatios[index % aspectRatios.length],
-          }));
+          try {
+               const images = Array.isArray(allImages) && allImages.length > 0 
+                    ? allImages 
+                    : [];
+               return images.slice(0, MAX_GALLERY_IMAGES).map((src, index) => ({
+                    id: index + 1,
+                    src,
+                    aspect: aspectRatios[index % aspectRatios.length],
+               }));
+          } catch (error) {
+               console.error("Error initializing gallery images:", error);
+               return [];
+          }
      });
 
      useEffect(() => {
           // Shuffle images with random aspect ratios on mount - use requestIdleCallback for better performance
           const shuffleAndSetImages = () => {
-               const shuffledImages = shuffleArray(allImages);
-               const shuffled = shuffledImages.slice(0, MAX_GALLERY_IMAGES).map((src, index) => ({
-                    id: index + 1,
-                    src,
-                    aspect: aspectRatios[index % aspectRatios.length],
-               }));
-               setGalleryImages(shuffled);
+               try {
+                    const images = Array.isArray(allImages) && allImages.length > 0 
+                         ? allImages 
+                         : [];
+                    if (images.length === 0) {
+                         console.warn("allImages is empty, skipping shuffle");
+                         return;
+                    }
+                    const shuffledImages = shuffleArray(images);
+                    const shuffled = shuffledImages.slice(0, MAX_GALLERY_IMAGES).map((src, index) => ({
+                         id: index + 1,
+                         src,
+                         aspect: aspectRatios[index % aspectRatios.length],
+                    }));
+                    setGalleryImages(shuffled);
+               } catch (error) {
+                    console.error("Error shuffling gallery images:", error);
+                    // Keep default images on error
+               }
           };
 
           // Use requestIdleCallback if available, otherwise setTimeout
-          if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-               requestIdleCallback(shuffleAndSetImages, { timeout: 1000 });
-          } else {
+          // Wrap in try-catch for better mobile compatibility
+          try {
+               if (typeof window !== 'undefined' && 'requestIdleCallback' in window && typeof window.requestIdleCallback === 'function') {
+                    requestIdleCallback(shuffleAndSetImages, { timeout: 1000 });
+               } else {
+                    setTimeout(shuffleAndSetImages, 100);
+               }
+          } catch (error) {
+               // Fallback to setTimeout if requestIdleCallback fails
+               console.warn("requestIdleCallback failed, using setTimeout:", error);
                setTimeout(shuffleAndSetImages, 100);
           }
      }, []);
@@ -138,6 +197,7 @@ function page() {
           return selectedModel.supported_durations;
      };
 
+     // Mobile detection for model dropdown positioning
      useEffect(() => {
           const checkMobile = () => {
                setIsMobile(window.innerWidth < 1024);
@@ -498,14 +558,14 @@ function page() {
                          
                          // Restore job start time from localStorage or use creation time
                          if (!jobStartTime && runningJob.created_at) {
-                              const storedStartTime = localStorage.getItem(`job_start_${runningJobId}`);
+                              const storedStartTime = safeLocalStorage.getItem(`job_start_${runningJobId}`);
                               if (storedStartTime) {
                                    setJobStartTime(parseInt(storedStartTime));
                               } else {
                                    // Use job creation time as fallback
                                    const createdTime = new Date(runningJob.created_at).getTime();
                                    setJobStartTime(createdTime);
-                                   localStorage.setItem(`job_start_${runningJobId}`, createdTime.toString());
+                                   safeLocalStorage.setItem(`job_start_${runningJobId}`, createdTime.toString());
                               }
                          }
                          
@@ -528,14 +588,14 @@ function page() {
                          if (currentJob) {
                               // Restore job start time from localStorage if not set
                               if (!jobStartTime && currentJob.created_at) {
-                                   const storedStartTime = localStorage.getItem(`job_start_${jobId}`);
+                                   const storedStartTime = safeLocalStorage.getItem(`job_start_${jobId}`);
                                    if (storedStartTime) {
                                         setJobStartTime(parseInt(storedStartTime));
                                    } else {
                                         // Use job creation time as fallback
                                         const createdTime = new Date(currentJob.created_at).getTime();
                                         setJobStartTime(createdTime);
-                                        localStorage.setItem(`job_start_${jobId}`, createdTime.toString());
+                                        safeLocalStorage.setItem(`job_start_${jobId}`, createdTime.toString());
                                    }
                               }
                               
@@ -556,14 +616,14 @@ function page() {
                                    setIsGenerating(false);
                                    setIsPolling(false);
                                    // Clean up localStorage
-                                   localStorage.removeItem(`job_start_${jobId}`);
+                                   safeLocalStorage.removeItem(`job_start_${jobId}`);
                               } else if (currentJob.status === "failed") {
                                    // Job failed
                                    setError(currentJob.error || "Video generation failed");
                                    setIsGenerating(false);
                                    setIsPolling(false);
                                    // Clean up localStorage
-                                   localStorage.removeItem(`job_start_${jobId}`);
+                                   safeLocalStorage.removeItem(`job_start_${jobId}`);
                               }
                          }
                     }
@@ -662,7 +722,7 @@ function page() {
           // Set new file (but DON'T upload yet - wait for Generate button)
           setImageFile(file);
 
-          // Create preview
+          // Create preview (same pattern as /image page - simple and works)
           const reader = new FileReader();
           reader.onload = (e) => {
                setImagePreview(e.target?.result as string);
@@ -754,18 +814,32 @@ function page() {
           setError(null);
           setOutputUrl(null);
           setJobStatus(null);
+          
+          // Clear image from frontend immediately when generation starts
+          // This allows user to upload new image right away
+          const currentImageFile = imageFile;
+          const currentImageUrl = imageUrlRef.current || imageUrl;
+          setImageFile(null);
+          setImagePreview(null);
+          setImageUrl(null);
+          imageUrlRef.current = null;
+          uploadTimestampRef.current = 0;
+          // Clear the file input field
+          if (imageInputRef.current) {
+               imageInputRef.current.value = '';
+          }
 
           try {
                // Upload image to Backblaze if we have a file but no URL yet
-               let finalImageUrl = imageUrlRef.current || imageUrl;
+               let finalImageUrl = currentImageUrl;
                
-               if (imageFile && !finalImageUrl) {
+               if (currentImageFile && !finalImageUrl) {
                     console.log("📤 Uploading image to Backblaze before generation...");
                     setImageUploading(true);
                     
                     try {
                          const uploadStartTime = Date.now();
-                         const url = await uploadFileToBackblaze(imageFile, false);
+                         const url = await uploadFileToBackblaze(currentImageFile, false);
                          
                          if (url) {
                               // Set ref FIRST (synchronous, immediate) - this is the source of truth
@@ -825,14 +899,29 @@ function page() {
                     requestBody.aspect_ratio = aspectRatio;
                }
 
-               const response = await fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/image-to-video/submit`, {
-                    method: "POST",
-                    headers: {
-                         "Content-Type": "application/json",
-                         "Authorization": `Bearer ${token}`
-                    },
-                    body: JSON.stringify(requestBody)
-               });
+               // Add timeout to submit request (30 seconds)
+               const abortController = new AbortController();
+               const submitTimeout = setTimeout(() => abortController.abort(), 30000);
+
+               let response;
+               try {
+                    response = await fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/image-to-video/submit`, {
+                         method: "POST",
+                         headers: {
+                              "Content-Type": "application/json",
+                              "Authorization": `Bearer ${token}`
+                         },
+                         body: JSON.stringify(requestBody),
+                         signal: abortController.signal
+                    });
+                    clearTimeout(submitTimeout);
+               } catch (fetchError: any) {
+                    clearTimeout(submitTimeout);
+                    if (fetchError.name === 'AbortError') {
+                         throw new Error("Request timed out. Please try again.");
+                    }
+                    throw fetchError;
+               }
 
                const data = await response.json();
 
@@ -844,12 +933,14 @@ function page() {
                setJobStatus(data.status);
                setSelectedJob(data);
                
+               // Image already cleared at start of handleGenerate, no need to clear again
+               
                // Store job start time for progress calculation (persists across refreshes)
                const startTime = Date.now();
                setJobStartTime(startTime);
                // Store in localStorage for persistence across refreshes
                if (data.job_id) {
-                    localStorage.setItem(`job_start_${data.job_id}`, startTime.toString());
+                    safeLocalStorage.setItem(`job_start_${data.job_id}`, startTime.toString());
                }
 
                // Start polling for status
@@ -874,15 +965,24 @@ function page() {
           if (!token) return;
 
           let pollInterval: NodeJS.Timeout | null = null;
+          let timeoutId: NodeJS.Timeout | null = null;
+          const MAX_POLL_TIME = 10 * 60 * 1000; // 10 minutes total
+          const POLL_INTERVAL = 3000; // 3 seconds
+          const REQUEST_TIMEOUT = 10000; // 10 seconds per request
 
           const poll = async () => {
+               const abortController = new AbortController();
+               const requestTimeout = setTimeout(() => abortController.abort(), REQUEST_TIMEOUT);
+
                try {
                     const response = await fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/image-to-video/jobs/${jobIdToPoll}`, {
                          headers: {
                               "Authorization": `Bearer ${token}`
-                         }
+                         },
+                         signal: abortController.signal
                     });
 
+                    clearTimeout(requestTimeout);
                     const data = await response.json();
 
                     if (response.ok && data) {
@@ -896,9 +996,10 @@ function page() {
                               setIsPolling(false);
                               isSubmittingRef.current = false; // Reset ref when completed
                               if (pollInterval) clearInterval(pollInterval);
+                              if (timeoutId) clearTimeout(timeoutId);
                               // Clean up localStorage
                               if (jobIdToPoll) {
-                                   localStorage.removeItem(`job_start_${jobIdToPoll}`);
+                                   safeLocalStorage.removeItem(`job_start_${jobIdToPoll}`);
                               }
                               loadPreviousJobs();
                          } else if (data.status === "failed") {
@@ -907,33 +1008,45 @@ function page() {
                               setIsPolling(false);
                               isSubmittingRef.current = false; // Reset ref on failure
                               if (pollInterval) clearInterval(pollInterval);
+                              if (timeoutId) clearTimeout(timeoutId);
                               // Clean up localStorage
                               if (jobIdToPoll) {
-                                   localStorage.removeItem(`job_start_${jobIdToPoll}`);
+                                   safeLocalStorage.removeItem(`job_start_${jobIdToPoll}`);
                               }
                          } else if (data.status === "running" || data.status === "pending") {
                               setJobStatus(data.status);
                          }
                     }
-               } catch (err) {
-                    console.error("Error polling job status:", err);
-                    // Don't stop polling on error - continue trying
+               } catch (err: any) {
+                    clearTimeout(requestTimeout);
+                    // Handle timeout specifically
+                    if (err.name === 'AbortError') {
+                         console.warn("Request timeout during polling, will retry on next poll");
+                         // Don't stop polling - continue trying
+                    } else {
+                         console.error("Error polling job status:", err);
+                         // Don't stop polling on error - continue trying
+                    }
                }
           };
 
           // Poll immediately, then every 3 seconds
           poll();
-          pollInterval = setInterval(poll, 3000);
+          pollInterval = setInterval(poll, POLL_INTERVAL);
 
-          // Timeout after 5 minutes (300 seconds)
-          setTimeout(() => {
+          // Overall timeout after 10 minutes
+          timeoutId = setTimeout(() => {
                if (pollInterval) clearInterval(pollInterval);
-               if (jobStatus !== "completed" && jobStatus !== "failed") {
-                    setError("Job timed out. Please check back later.");
+               const currentStatus = jobStatus;
+               if (currentStatus !== "completed" && currentStatus !== "failed") {
+                    setError("Job is taking longer than expected. You can check back later or refresh the page to see the status.");
                     setIsGenerating(false);
                     setIsPolling(false);
+                    isSubmittingRef.current = false;
+                    // Don't remove job from localStorage - user can check back later
+                    console.log("Polling timeout reached, but job may still be processing on the server");
                }
-          }, 300000); // 5 minutes
+          }, MAX_POLL_TIME);
      };
 
      // Handle drag and drop for images
@@ -1028,9 +1141,10 @@ function page() {
     ${sidebarOpen ? "left-0" : "-left-full"} 
     lg:left-0 lg:top-[72px] top-0 lg:w-[301px] w-full flex flex-col justify-between 
     lg:h-[calc(100vh_-_72px)] h-screen lg:bottom-auto bottom-0 
-    border-r border-gray-1300 lg:py-8 pt-[68px] pb-4 px-4 sidebar-bg
+    border-r border-gray-1300 lg:py-8 pt-[68px] px-4 sidebar-bg
     transition-all duration-300 overflow-y-auto scroll-smooth
-   `}>
+    lg:pb-8 pb-20
+   `} style={{ paddingBottom: 'max(5rem, calc(1rem + env(safe-area-inset-bottom, 0px)))' }}>
                          {/* Mobile-only close button */}
                          <button
                               onClick={() => setSidebarOpen(false)}
@@ -1328,7 +1442,7 @@ function page() {
                                    </div>
                               )}
                          </div>
-                         <div className="text-center">
+                         <div className="text-center lg:pb-0" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))' }}>
                               <button 
                                    onClick={(e) => {
                                         e.preventDefault();
@@ -1339,8 +1453,10 @@ function page() {
                                    }}
                                    disabled={isGenerating || imageUploading || audioUploading || isSubmittingRef.current}
                                    className={clsx(
-                                        "relative md:text-sm text-xs w-full text-center font-bold leading-[120%] text-black inline-block py-[11.5px] px-3.5 shadow-3xl bg1 rounded-xl hover:shadow-7xl transition-all duration-300 overflow-hidden",
-                                        (isGenerating || imageUploading || audioUploading || isSubmittingRef.current) && "opacity-50 cursor-not-allowed"
+                                        "relative md:text-sm text-xs w-full text-center font-bold leading-[120%] text-black inline-block py-[11.5px] px-3.5 shadow-3xl bg1 rounded-xl transition-all duration-300 overflow-hidden",
+                                        (isGenerating || imageUploading || audioUploading || isSubmittingRef.current) 
+                                             ? "cursor-not-allowed" 
+                                             : "hover:shadow-7xl"
                                    )}
                               >
                                    {isGenerating || imageUploading || audioUploading ? (
@@ -1372,7 +1488,7 @@ function page() {
                               </div>
                          ) : previousJobs.length > 0 || outputUrl || (isGenerating && imagePreview) ? (
                               <div className="w-full max-w-[1320px] mx-auto">
-                                   <div className="lg:hidden block mb-6 px-5">
+                                   <div className="lg:hidden block mb-6 px-5" style={{ paddingBottom: 'max(1.5rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))' }}>
                          <div className="text-center mb-6">
                                              <div className="flex gap-2 items-center justify-center mb-2">
                                    <span className="text-[10px] font-medium text-black inline-block py-0.5 px-[7px] bg-blue-1000 rounded-xl">NEW</span>
@@ -1406,7 +1522,7 @@ function page() {
                               </div>
                               <h2 className="md:text-5xl text-[38px] font-medium text-white leading-[120%] my-4 tracking-[-1px]">Turn Any Image Into Motion</h2>
                                         <p className="md:text-base text-sm font-medium leading-[120%] text-white/60">Turn images into high-impact creative videos powered by the latest AI models.</p>
-                              <div className="lg:hidden block mt-12">
+                              <div className="lg:hidden block mt-12" style={{ paddingBottom: 'max(1.5rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))' }}>
                                              <button 
                                                   onClick={() => setSidebarOpen(true)} 
                                                   className="md:text-sm text-xs w-full text-center font-bold leading-[120%] text-black inline-block py-[11.5px] px-3.5 shadow-3xl bg1 rounded-xl hover:shadow-7xl transition-all duration-300" 
@@ -1477,4 +1593,4 @@ function page() {
      )
 }
 
-export default page
+export default Page
