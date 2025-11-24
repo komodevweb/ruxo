@@ -900,16 +900,13 @@ function Page() {
           setOutputUrl(null);
           setJobStatus(null);
           
-          // Clear image from frontend immediately when generation starts
-          // This allows user to upload new image right away
+          // Save current image data for upload, but keep preview visible
           const currentImageFile = imageFile;
           const currentImageUrl = imageUrlRef.current || imageUrl;
+          
+          // Clear only the file object to allow new uploads, but keep preview and URL visible
           setImageFile(null);
-          setImagePreview(null);
-          setImageUrl(null);
-          imageUrlRef.current = null;
-          uploadTimestampRef.current = 0;
-          // Clear the file input field
+          // Reset the file input to allow reselecting the same file
           if (imageInputRef.current) {
                imageInputRef.current.value = '';
           }

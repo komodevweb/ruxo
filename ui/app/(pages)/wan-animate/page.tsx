@@ -517,23 +517,17 @@ function page() {
           setOutputUrl(null);
           setJobStatus(null);
           
-          // Clear image and video from frontend immediately when generation starts
-          // This allows user to upload new files right away
+          // Save current file data for upload, but keep previews visible
           const currentImageFile = imageFile;
           const currentVideoFile = videoFile;
           const currentImageUrl = imageUrlRef.current || imageUrl;
           const currentVideoUrl = videoUrlRef.current || videoUrl;
+          
+          // Clear only the file objects to allow new uploads, but keep previews and URLs visible
           setImageFile(null);
-          setImagePreview(null);
-          setImageUrl(null);
           setVideoFile(null);
-          setVideoPreview(null);
-          setVideoUrl(null);
-          imageUrlRef.current = null;
-          videoUrlRef.current = null;
-          imageUploadTimestampRef.current = 0;
-          videoUploadTimestampRef.current = 0;
-          // Clear the file input fields
+          
+          // Reset the file input fields to allow reselecting the same files
           if (imageInputRef.current) {
                imageInputRef.current.value = '';
           }
