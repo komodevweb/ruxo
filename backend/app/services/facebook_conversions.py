@@ -117,9 +117,9 @@ class FacebookConversionsService:
                 "user_data": user_data,
             }
             
-            # Add event_data if provided
-            if event_data:
-                event.update(event_data)
+            # Add event_source_url if provided
+            if event_data and "event_source_url" in event_data:
+                event["event_source_url"] = event_data["event_source_url"]
             
             # Add custom_data if provided
             if custom_data:
