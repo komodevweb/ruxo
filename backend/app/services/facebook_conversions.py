@@ -11,8 +11,40 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 import httpx
 from app.core.config import settings
+from logging.handlers import RotatingFileHandler
+import os
 
 logger = logging.getLogger(__name__)
+
+# Create dedicated Facebook Conversions API logger that writes to file
+fb_conversions_logger = logging.getLogger("facebook_conversions_api")
+fb_conversions_logger.setLevel(logging.INFO)
+
+# Create logs directory if it doesn't exist
+log_dir = "/root/ruxo/logs"
+os.makedirs(log_dir, exist_ok=True)
+
+# Create rotating file handler (max 50MB per file, keep 5 files)
+fb_log_file = os.path.join(log_dir, "facebook_conversions_api.log")
+file_handler = RotatingFileHandler(
+    fb_log_file,
+    maxBytes=50*1024*1024,  # 50MB
+    backupCount=5
+)
+file_handler.setLevel(logging.INFO)
+
+# Create formatter with detailed information
+file_formatter = logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+file_handler.setFormatter(file_formatter)
+
+# Add handler to fb_conversions_logger
+fb_conversions_logger.addHandler(file_handler)
+
+# Prevent propagation to avoid duplicate logs
+fb_conversions_logger.propagate = False
 
 class FacebookConversionsService:
     """Service for sending events to Facebook Conversions API."""
@@ -155,6 +187,25 @@ class FacebookConversionsService:
                 "access_token": self.access_token,
             }
             
+            # Log the complete payload being sent to Facebook (mask access token)
+            import json
+            payload_for_logging = {
+                "data": [event],
+                "access_token": f"{self.access_token[:10]}...{self.access_token[-4:]}" if self.access_token else "None"
+            }
+            
+            # Log concise summary to main console (no JSON)
+            logger.info(f"📤 Sending {event_name} event to Facebook Conversions API")
+            
+            # Log full details to dedicated file
+            fb_conversions_logger.info("=" * 100)
+            fb_conversions_logger.info(f"📤 OUTGOING REQUEST - {event_name} Event")
+            fb_conversions_logger.info(f"URL: {self.api_url}/{self.pixel_id}/events")
+            fb_conversions_logger.info(f"HTTP Method: POST")
+            fb_conversions_logger.info(f"Request Payload:")
+            fb_conversions_logger.info(json.dumps(payload_for_logging, indent=2))
+            fb_conversions_logger.info("=" * 100)
+            
             # Send the request
             url = f"{self.api_url}/{self.pixel_id}/events"
             
@@ -162,8 +213,19 @@ class FacebookConversionsService:
                 response = await client.post(url, json=payload)
                 result = response.json()
                 
-                # Log the full response for debugging
-                logger.debug(f"Facebook Conversions API response: {result}")
+                # Log concise response to main console (no JSON)
+                events_received = result.get("events_received", 0)
+                logger.info(f"📥 Facebook response: {response.status_code} - {events_received} event(s) received")
+                
+                # Log full response to dedicated file
+                fb_conversions_logger.info("=" * 100)
+                fb_conversions_logger.info(f"📥 INCOMING RESPONSE - {event_name} Event")
+                fb_conversions_logger.info(f"HTTP Status Code: {response.status_code}")
+                fb_conversions_logger.info(f"Response Headers: {dict(response.headers)}")
+                fb_conversions_logger.info(f"Response Body:")
+                fb_conversions_logger.info(json.dumps(result, indent=2))
+                fb_conversions_logger.info("=" * 100)
+                fb_conversions_logger.info("")  # Empty line for readability
                 
                 # Check for errors in response
                 if "error" in result:
@@ -178,12 +240,12 @@ class FacebookConversionsService:
                     return False
                 
                 # Check events_received
-                events_received = result.get("events_received", 0)
-                if events_received > 0:
-                    logger.info(f"Successfully sent {event_name} event to Facebook Conversions API. Events received: {events_received}")
+                events_received_check = result.get("events_received", 0)
+                if events_received_check > 0:
+                    logger.info(f"✅ {event_name} event successfully sent")
                     return True
                 else:
-                    logger.warning(f"Facebook Conversions API received 0 events for {event_name}. Response: {result}")
+                    logger.warning(f"⚠️  Facebook received 0 events for {event_name}")
                     return False
                     
         except httpx.HTTPStatusError as e:

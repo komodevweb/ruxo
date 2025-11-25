@@ -18,6 +18,14 @@ class UserProfile(SQLModel, table=True):
     signup_fbp: Optional[str] = None  # Facebook browser ID cookie
     signup_fbc: Optional[str] = None  # Facebook click ID cookie
     
+    # Last checkout tracking context (for Purchase event attribution)
+    # These are updated every time user initiates checkout, so we have fresh data for webhooks
+    last_checkout_ip: Optional[str] = None
+    last_checkout_user_agent: Optional[str] = None
+    last_checkout_fbp: Optional[str] = None
+    last_checkout_fbc: Optional[str] = None
+    last_checkout_timestamp: Optional[datetime] = None
+    
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )

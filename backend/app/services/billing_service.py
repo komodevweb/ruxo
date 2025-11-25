@@ -1,5 +1,6 @@
 import stripe
 import uuid
+import time
 from typing import Optional
 from datetime import datetime, timedelta
 from fastapi import HTTPException
@@ -155,6 +156,50 @@ class BillingService:
                     self.session.add(existing_subscription)
                     await self.session.commit()
                     
+                    # Track Purchase event for subscription upgrade/downgrade
+                    # This is critical because Subscription.modify() doesn't trigger checkout.session.completed webhook
+                    try:
+                        from app.services.facebook_conversions import FacebookConversionsService
+                        
+                        # Calculate purchase value
+                        value = plan.amount_cents / 100.0
+                        currency = "USD"
+                        event_id = f"sub_modify_{existing_subscription.stripe_subscription_id}_{int(time.time())}"
+                        
+                        # Extract name parts from display_name
+                        first_name = None
+                        last_name = None
+                        if user.display_name:
+                            name_parts = user.display_name.split(maxsplit=1)
+                            first_name = name_parts[0] if name_parts else None
+                            last_name = name_parts[1] if len(name_parts) > 1 else None
+                        
+                        logger.info("=" * 80)
+                        logger.info(f"💰 [PURCHASE TRACKING] Tracking Purchase for Subscription.modify() upgrade")
+                        logger.info(f"💰 [PURCHASE TRACKING] User: {user.email}, Plan: {plan_name}, Value: ${value}")
+                        logger.info(f"💰 [PURCHASE TRACKING] Using tracking context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}..., fbp={fbp}, fbc={fbc}")
+                        
+                        conversions_service = FacebookConversionsService()
+                        import asyncio
+                        asyncio.create_task(conversions_service.track_purchase(
+                            value=value,
+                            currency=currency,
+                            email=user.email,
+                            first_name=first_name,
+                            last_name=last_name,
+                            external_id=str(user.id),
+                            client_ip=client_ip,
+                            client_user_agent=client_user_agent,
+                            fbp=fbp,
+                            fbc=fbc,
+                            event_source_url=f"{settings.FRONTEND_URL}/upgrade",
+                            event_id=event_id,
+                        ))
+                        logger.info(f"✅ [PURCHASE TRACKING] Purchase event triggered for subscription upgrade")
+                        logger.info("=" * 80)
+                    except Exception as e:
+                        logger.error(f"❌ [PURCHASE TRACKING] Failed to track Purchase event for upgrade: {str(e)}", exc_info=True)
+                    
                     # Return the customer portal URL instead of checkout URL
                     # User should use portal to manage their updated subscription
                     portal_session = stripe.billing_portal.Session.create(
@@ -206,7 +251,18 @@ class BillingService:
                                 client_user_agent=client_user_agent,
                                 fbp=fbp,
                                 fbc=fbc
-                            )
+                            ),
+                            "subscription_data": {
+                                "metadata": {
+                                    "user_id": str(user.id),
+                                    "plan_id": str(plan.id),
+                                    "plan_name": plan.name,
+                                    "client_ip": client_ip or "",
+                                    "client_user_agent": client_user_agent or "",
+                                    "fbp": fbp or "",
+                                    "fbc": fbc or ""
+                                }
+                            }
                         }
                         
                         # Apply 40% discount coupon for yearly plans
@@ -274,7 +330,11 @@ class BillingService:
                                 "plan_id": str(plan.id),
                                 "plan_name": plan.name,
                                 "is_upgrade": "true",
-                                "existing_subscription_id": existing_subscription.stripe_subscription_id
+                                "existing_subscription_id": existing_subscription.stripe_subscription_id,
+                                "client_ip": client_ip or "",
+                                "client_user_agent": client_user_agent or "",
+                                "fbp": fbp or "",
+                                "fbc": fbc or ""
                             }
                         }
                     }
@@ -380,7 +440,18 @@ class BillingService:
                 client_user_agent=client_user_agent,
                 fbp=fbp,
                 fbc=fbc
-            )
+            ),
+            "subscription_data": {
+                "metadata": {
+                    "user_id": str(user.id),
+                    "plan_id": str(plan.id),
+                    "plan_name": plan.name,
+                    "client_ip": client_ip or "",
+                    "client_user_agent": client_user_agent or "",
+                    "fbp": fbp or "",
+                    "fbc": fbc or ""
+                }
+            }
         }
         
         # Apply 40% discount coupon for yearly plans
@@ -592,6 +663,26 @@ class BillingService:
                     client_user_agent = metadata.get("client_user_agent")
                     fbp = metadata.get("fbp")
                     fbc = metadata.get("fbc")
+                    
+                    # FALLBACK 1: Check subscription metadata if session metadata is missing
+                    if not client_ip and stripe_subscription:
+                        sub_metadata = stripe_subscription.get("metadata", {})
+                        if sub_metadata.get("client_ip"):
+                            logger.info(f"💰 [PURCHASE TRACKING] Using tracking context from subscription metadata")
+                            client_ip = sub_metadata.get("client_ip")
+                            client_user_agent = sub_metadata.get("client_user_agent")
+                            fbp = sub_metadata.get("fbp")
+                            fbc = sub_metadata.get("fbc")
+                    
+                    # FALLBACK 2: If still missing, use last_checkout_* from user profile
+                    # This handles cases where subscription was modified directly via Stripe API without checkout
+                    if not client_ip and user.last_checkout_ip:
+                        logger.info(f"💰 [PURCHASE TRACKING] Using fallback tracking context from user profile")
+                        client_ip = user.last_checkout_ip
+                        client_user_agent = user.last_checkout_user_agent
+                        fbp = user.last_checkout_fbp
+                        fbc = user.last_checkout_fbc
+                        logger.info(f"💰 [PURCHASE TRACKING] Fallback context age: {datetime.utcnow() - user.last_checkout_timestamp if user.last_checkout_timestamp else 'unknown'}")
                     
                     # Extract first and last name from display_name for better event matching
                     first_name = None

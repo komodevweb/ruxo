@@ -56,8 +56,27 @@ async def create_checkout_session(
     fbp = request.cookies.get("_fbp")
     fbc = request.cookies.get("_fbc")
     
+    # If fbc cookie is not set but fbclid is in URL, create fbc from fbclid
+    # Per Facebook docs: fbc format is fb.1.{timestamp}.{fbclid}
+    if not fbc:
+        fbclid = request.query_params.get("fbclid")
+        if fbclid:
+            import time
+            fbc = f"fb.1.{int(time.time() * 1000)}.{fbclid}"
+            logger.info(f"💳 [CHECKOUT] Created fbc from fbclid URL parameter: {fbc}")
+    
     logger.info(f"💳 [CHECKOUT] Creating checkout session for user {current_user.id}")
     logger.info(f"💳 [CHECKOUT] Captured tracking context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}..., fbp={fbp}, fbc={fbc}")
+    
+    # Store tracking context in user profile for fallback (in case metadata is missing in webhook)
+    current_user.last_checkout_ip = client_ip
+    current_user.last_checkout_user_agent = client_user_agent
+    current_user.last_checkout_fbp = fbp
+    current_user.last_checkout_fbc = fbc
+    current_user.last_checkout_timestamp = datetime.utcnow()
+    session.add(current_user)
+    await session.commit()
+    logger.info(f"💳 [CHECKOUT] Stored tracking context in user profile for fallback")
     
     service = BillingService(session)
     url = await service.create_checkout_session(
