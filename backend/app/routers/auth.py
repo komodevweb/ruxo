@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import and_
 from app.services.credits_service import CreditsService
+from app.utils.request_helpers import get_client_ip
 from supabase import create_client, Client
 from app.core.config import settings
 import logging
@@ -92,15 +93,10 @@ async def signup(
             user_profile = result.scalar_one_or_none()
             
             # Get tracking context for later use (email verification webhook)
-            client_ip = None
-            client_user_agent = None
-            fbp = None
-            fbc = None
-            if http_request:
-                client_ip = http_request.client.host if http_request.client else None
-                client_user_agent = http_request.headers.get("user-agent")
-                fbp = http_request.cookies.get("_fbp")
-                fbc = http_request.cookies.get("_fbc")
+            client_ip = get_client_ip(http_request)
+            client_user_agent = http_request.headers.get("user-agent") if http_request else None
+            fbp = http_request.cookies.get("_fbp") if http_request else None
+            fbc = http_request.cookies.get("_fbc") if http_request else None
             
             if not user_profile:
                 user_profile = UserProfile(
@@ -254,16 +250,11 @@ async def signup(
                 last_name = name_parts[1] if len(name_parts) > 1 else None
             
             # Get client IP and user agent from HTTP request
-            client_ip = None
-            client_user_agent = None
-            fbp = None
-            fbc = None
-            if http_request:
-                client_ip = http_request.client.host if http_request.client else None
-                client_user_agent = http_request.headers.get("user-agent")
-                # Get Facebook cookies if available
-                fbp = http_request.cookies.get("_fbp")
-                fbc = http_request.cookies.get("_fbc")
+            client_ip = get_client_ip(http_request)
+            client_user_agent = http_request.headers.get("user-agent") if http_request else None
+            # Get Facebook cookies if available
+            fbp = http_request.cookies.get("_fbp") if http_request else None
+            fbc = http_request.cookies.get("_fbc") if http_request else None
             
             # Track registration (fire and forget - don't block response)
             import asyncio
@@ -294,18 +285,16 @@ async def signup(
             conversions_service = FacebookConversionsService()
             
             # Get client IP and user agent from HTTP request if available
-            client_ip = None
-            client_user_agent = None
-            fbp = None
-            fbc = None
             try:
-                if http_request:
-                    client_ip = http_request.client.host if http_request.client else None
-                    client_user_agent = http_request.headers.get("user-agent")
-                    fbp = http_request.cookies.get("_fbp")
-                    fbc = http_request.cookies.get("_fbc")
+                client_ip = get_client_ip(http_request)
+                client_user_agent = http_request.headers.get("user-agent") if http_request else None
+                fbp = http_request.cookies.get("_fbp") if http_request else None
+                fbc = http_request.cookies.get("_fbc") if http_request else None
             except:
-                pass
+                client_ip = None
+                client_user_agent = None
+                fbp = None
+                fbc = None
             
             # Track ViewContent (fire and forget - don't block response)
             import asyncio
@@ -469,18 +458,16 @@ async def login(
             conversions_service = FacebookConversionsService()
             
             # Get client IP and user agent from HTTP request if available
-            client_ip = None
-            client_user_agent = None
-            fbp = None
-            fbc = None
             try:
-                if http_request:
-                    client_ip = http_request.client.host if http_request.client else None
-                    client_user_agent = http_request.headers.get("user-agent")
-                    fbp = http_request.cookies.get("_fbp")
-                    fbc = http_request.cookies.get("_fbc")
+                client_ip = get_client_ip(http_request)
+                client_user_agent = http_request.headers.get("user-agent") if http_request else None
+                fbp = http_request.cookies.get("_fbp") if http_request else None
+                fbc = http_request.cookies.get("_fbc") if http_request else None
             except:
-                pass
+                client_ip = None
+                client_user_agent = None
+                fbp = None
+                fbc = None
             
             # Track ViewContent (fire and forget - don't block response)
             import asyncio
@@ -947,15 +934,10 @@ async def oauth_exchange(
                         last_name = name_parts[1] if len(name_parts) > 1 else None
                     
                     # Get client info from HTTP request
-                    client_ip = None
-                    client_user_agent = None
-                    fbp = None
-                    fbc = None
-                    if http_request:
-                        client_ip = http_request.client.host if http_request.client else None
-                        client_user_agent = http_request.headers.get("user-agent")
-                        fbp = http_request.cookies.get("_fbp")
-                        fbc = http_request.cookies.get("_fbc")
+                    client_ip = get_client_ip(http_request)
+                    client_user_agent = http_request.headers.get("user-agent") if http_request else None
+                    fbp = http_request.cookies.get("_fbp") if http_request else None
+                    fbc = http_request.cookies.get("_fbc") if http_request else None
                     
                     # Generate unique event_id for deduplication
                     import asyncio

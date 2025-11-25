@@ -839,9 +839,10 @@ function page() {
     ${sidebarOpen ? "left-0" : "-left-full"} 
     lg:left-0 lg:top-[72px] top-0 lg:w-[301px] w-full flex flex-col justify-between 
     lg:h-[calc(100vh_-_72px)] h-screen lg:bottom-auto bottom-0 
-    border-r border-gray-1300 lg:py-8 pt-[68px] pb-4 px-4 sidebar-bg
+    border-r border-gray-1300 lg:py-8 pt-[68px] px-4 sidebar-bg
     transition-all duration-300 overflow-y-auto scroll-smooth
-   `}>
+    lg:pb-8 pb-20
+   `} style={{ paddingBottom: 'max(5rem, calc(1rem + env(safe-area-inset-bottom, 0px)))' }}>
                          {/* Mobile-only close button */}
                          <button
                               onClick={() => setSidebarOpen(false)}

@@ -6,6 +6,7 @@ from app.core.security import get_current_user, get_current_user_token
 from app.models.user import UserProfile
 from app.models.billing import Plan
 from app.services.billing_service import BillingService
+from app.utils.request_helpers import get_client_ip
 from app.db.session import get_session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -50,7 +51,7 @@ async def create_checkout_session(
     session: AsyncSession = Depends(get_session)
 ):
     # Capture tracking context for later Purchase event
-    client_ip = request.client.host if request.client else None
+    client_ip = get_client_ip(request)
     client_user_agent = request.headers.get("user-agent")
     fbp = request.cookies.get("_fbp")
     fbc = request.cookies.get("_fbc")
@@ -173,7 +174,7 @@ async def track_initiate_checkout(
         from app.services.facebook_conversions import FacebookConversionsService
         
         # Get client IP and user agent
-        client_ip = request.client.host if request.client else None
+        client_ip = get_client_ip(request)
         client_user_agent = request.headers.get("user-agent")
         
         # Get fbp and fbc cookies if available
@@ -212,7 +213,7 @@ async def track_view_content(
         from app.services.facebook_conversions import FacebookConversionsService
         
         # Get client IP and user agent
-        client_ip = request.client.host if request.client else None
+        client_ip = get_client_ip(request)
         client_user_agent = request.headers.get("user-agent")
         
         # Get fbp and fbc cookies if available
@@ -255,7 +256,7 @@ async def test_purchase(
         from app.services.facebook_conversions import FacebookConversionsService
         
         # Get client IP and user agent
-        client_ip = request.client.host if request.client else None
+        client_ip = get_client_ip(request)
         client_user_agent = request.headers.get("user-agent")
         
         # Get fbp and fbc cookies if available

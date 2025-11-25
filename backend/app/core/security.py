@@ -203,13 +203,24 @@ async def get_current_user(
                         
                         logger.info(f"🎯 [SECURITY] Triggering CompleteRegistration for NEW OAuth user: {user.email} (event_id: {event_id})")
                         
-                        # Note: We don't have access to Request object here, so we can't get client_ip, user_agent, fbp, fbc
+                        # Get saved tracking context from user profile (captured during OAuth signup)
+                        client_ip = user.signup_ip if hasattr(user, 'signup_ip') else None
+                        client_user_agent = user.signup_user_agent if hasattr(user, 'signup_user_agent') else None
+                        fbp = user.signup_fbp if hasattr(user, 'signup_fbp') else None
+                        fbc = user.signup_fbc if hasattr(user, 'signup_fbc') else None
+                        
+                        logger.info(f"🎯 [SECURITY] Tracking Context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}..., fbp={fbp}, fbc={fbc}")
+                        
                         # Fire CompleteRegistration event (fire and forget)
                         asyncio.create_task(conversions_service.track_complete_registration(
                             email=user.email,
                             first_name=first_name,
                             last_name=last_name,
                             external_id=str(user.id),
+                            client_ip=client_ip,
+                            client_user_agent=client_user_agent,
+                            fbp=fbp,
+                            fbc=fbc,
                             event_source_url=f"{settings.FRONTEND_URL}/",
                             event_id=event_id,
                         ))
