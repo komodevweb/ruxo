@@ -302,10 +302,17 @@ export default function ImagePage() {
                          });
                     setModels(filteredModels);
                     if (filteredModels.length > 0 && !selectedModel) {
-                         setSelectedModel(filteredModels[0]);
+                         // Set default model based on mode
+                         const defaultModel = mode === "image-to-image"
+                              ? filteredModels.find((m: any) => m.id === "google-nano-banana-pro-edit") || filteredModels[0]
+                              : filteredModels[0];
+                         setSelectedModel(defaultModel);
                     } else if (filteredModels.length > 0 && selectedModel && !filteredModels.find((m: any) => m.id === selectedModel.id)) {
-                         // If current model doesn't support the mode, switch to first available
-                         setSelectedModel(filteredModels[0]);
+                         // If current model doesn't support the mode, switch to preferred default
+                         const defaultModel = mode === "image-to-image"
+                              ? filteredModels.find((m: any) => m.id === "google-nano-banana-pro-edit") || filteredModels[0]
+                              : filteredModels[0];
+                         setSelectedModel(defaultModel);
                     }
                } else {
                     console.error("Failed to load models:", response.statusText);
@@ -344,8 +351,11 @@ export default function ImagePage() {
                
                setModels(filteredModels);
                if (filteredModels.length > 0 && selectedModel && !filteredModels.find((m: any) => m.id === selectedModel.id)) {
-                    // If current model doesn't support the mode, switch to first available
-                    setSelectedModel(filteredModels[0]);
+                    // If current model doesn't support the mode, switch to preferred default
+                    const defaultModel = mode === "image-to-image"
+                         ? filteredModels.find((m: any) => m.id === "google-nano-banana-pro-edit") || filteredModels[0]
+                         : filteredModels[0];
+                    setSelectedModel(defaultModel);
                }
           }
           // eslint-disable-next-line react-hooks/exhaustive-deps

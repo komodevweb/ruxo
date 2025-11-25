@@ -12,6 +12,72 @@ export default function robots(): MetadataRoute.Robots {
   
   return {
     rules: [
+      // Explicitly allow all major AI bots
+      {
+        userAgent: 'GPTBot', // OpenAI
+        allow: '/',
+      },
+      {
+        userAgent: 'ChatGPT-User', // OpenAI ChatGPT
+        allow: '/',
+      },
+      {
+        userAgent: 'Google-Extended', // Google Bard/Gemini
+        allow: '/',
+      },
+      {
+        userAgent: 'GoogleOther', // Google AI training
+        allow: '/',
+      },
+      {
+        userAgent: 'anthropic-ai', // Anthropic Claude
+        allow: '/',
+      },
+      {
+        userAgent: 'ClaudeBot', // Anthropic Claude
+        allow: '/',
+      },
+      {
+        userAgent: 'cohere-ai', // Cohere
+        allow: '/',
+      },
+      {
+        userAgent: 'PerplexityBot', // Perplexity AI
+        allow: '/',
+      },
+      {
+        userAgent: 'Applebot-Extended', // Apple AI
+        allow: '/',
+      },
+      {
+        userAgent: 'FacebookBot', // Meta AI
+        allow: '/',
+      },
+      {
+        userAgent: 'Diffbot', // Diffbot AI
+        allow: '/',
+      },
+      {
+        userAgent: 'Bytespider', // ByteDance (TikTok)
+        allow: '/',
+      },
+      {
+        userAgent: 'ImagesiftBot', // Image AI
+        allow: '/',
+      },
+      {
+        userAgent: 'omgili', // Webz.io AI
+        allow: '/',
+      },
+      {
+        userAgent: 'omgilibot', // Webz.io AI
+        allow: '/',
+      },
+      {
+        userAgent: 'YouBot', // You.com AI
+        allow: '/',
+      },
+      // Allow all other bots (including traditional search engines)
       {
         userAgent: '*',
         allow: '/',
