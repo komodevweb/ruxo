@@ -60,7 +60,7 @@ function Footer({ className }: FooterProps) {
                          
                          <div className="flex items-center gap-6">
                               <p className="text-xs font-normal text-white/40">
-                                   © {currentYear} Ruxo Inc.
+                                   © {currentYear} Runexo Inc.
                               </p>
                          </div>
                     </div>

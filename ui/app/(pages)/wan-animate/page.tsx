@@ -39,6 +39,31 @@ function page() {
                console.log("🔄 Video URL ref synced with state:", videoUrl);
           }
      }, [videoUrl]);
+     
+     // Ensure template videos play after mount
+     useEffect(() => {
+          const playVideos = async () => {
+               try {
+                    if (uploadVideoRef.current) {
+                         uploadVideoRef.current.load();
+                         await uploadVideoRef.current.play();
+                         console.log('Upload video template started playing');
+                    }
+                    if (bringToLifeVideoRef.current) {
+                         bringToLifeVideoRef.current.load();
+                         await bringToLifeVideoRef.current.play();
+                         console.log('Bring to life video started playing');
+                    }
+               } catch (err) {
+                    console.error('Error playing template videos:', err);
+               }
+          };
+          
+          // Delay to ensure DOM is ready
+          const timer = setTimeout(playVideos, 500);
+          return () => clearTimeout(timer);
+     }, []);
+     
      const [imageUploading, setImageUploading] = useState(false);
      const [videoUploading, setVideoUploading] = useState(false);
      const [isGenerating, setIsGenerating] = useState(false);
@@ -1152,17 +1177,21 @@ function page() {
                                              <div className="w-full aspect-[4/3] overflow-hidden rounded-xl relative">
                                                   <video
                                                        ref={uploadVideoRef}
-                                                       src="/images/wan/Upload-Video-Template.mp4"
+                                                       src="/images/wan/Upload-Video-Template.mp4?v=2"
                                                        autoPlay
                                                        muted
                                                        playsInline
+                                                       loop
+                                                       preload="auto"
+                                                       crossOrigin="anonymous"
                                                        className="w-full h-full object-cover"
                                                        style={{ pointerEvents: 'none' }}
-                                                       onEnded={() => {
-                                                            if (uploadVideoPlayCount.current < 3) {
-                                                                 uploadVideoPlayCount.current++;
-                                                                 uploadVideoRef.current?.play();
-                                                            }
+                                                       onError={(e) => {
+                                                            console.error('Video upload template error:', e);
+                                                       }}
+                                                       onLoadedData={() => {
+                                                            console.log('Video upload template loaded');
+                                                            uploadVideoRef.current?.play().catch(err => console.error('Play failed:', err));
                                                        }}
                                                   />
                                              </div>
@@ -1179,17 +1208,21 @@ function page() {
                                              <div className="w-full aspect-[4/3] overflow-hidden rounded-xl relative">
                                                   <video
                                                        ref={bringToLifeVideoRef}
-                                                       src="/images/wan/Bring-to-Life.mp4"
+                                                       src="/images/wan/Bring-to-Life.mp4?v=2"
                                                        autoPlay
                                                        muted
                                                        playsInline
+                                                       loop
+                                                       preload="auto"
+                                                       crossOrigin="anonymous"
                                                        className="w-full h-full object-cover"
                                                        style={{ pointerEvents: 'none' }}
-                                                       onEnded={() => {
-                                                            if (bringToLifeVideoPlayCount.current < 3) {
-                                                                 bringToLifeVideoPlayCount.current++;
-                                                                 bringToLifeVideoRef.current?.play();
-                                                            }
+                                                       onError={(e) => {
+                                                            console.error('Video bring to life error:', e);
+                                                       }}
+                                                       onLoadedData={() => {
+                                                            console.log('Video bring to life loaded');
+                                                            bringToLifeVideoRef.current?.play().catch(err => console.error('Play failed:', err));
                                                        }}
                                                   />
                                              </div>
