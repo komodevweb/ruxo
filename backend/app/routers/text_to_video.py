@@ -89,14 +89,28 @@ async def calculate_credits(
     duration: int
 ):
     """
-    Calculate credit cost for a given model, resolution, and duration.
+    Calculate credit cost for a given model, resolution, and duration (cached for 1 hour).
     """
+    from app.utils.cache import get_cached, set_cached, cache_key
+    
+    cache_key_str = cache_key("cache", "text-to-video", "credits", model_id, resolution, str(duration))
+    
+    # Try cache first
+    cached = await get_cached(cache_key_str)
+    if cached is not None:
+        return cached
+    
     model_config = get_model_config(model_id)
     if not model_config:
         return {"credits": 0}
     
     credits = model_config.get_credit_cost(resolution, duration)
-    return {"credits": credits}
+    result = {"credits": credits}
+    
+    # Cache for 1 hour (credit costs rarely change)
+    await set_cached(cache_key_str, result, ttl=3600)
+    
+    return result
 
 
 @router.post("/submit", response_model=TextToVideoResponse)
@@ -682,7 +696,7 @@ async def list_text_to_video_jobs(
     limit: int = 20,
     offset: int = 0
 ):
-    """List user's text-to-video jobs (cached for 1 minute)."""
+    """List user's text-to-video jobs (cached for 30 seconds)."""
     from app.utils.cache import get_cached, set_cached, cache_key
     
     cache_key_str = cache_key("cache", "user", str(current_user.id), "text-to-video", "jobs", str(limit), str(offset))
@@ -691,9 +705,7 @@ async def list_text_to_video_jobs(
     cached = await get_cached(cache_key_str)
     if cached is not None:
         return cached
-    """
-    List all Text To Video jobs for the current user.
-    """
+    
     logger.debug(f"Listing Text To Video jobs for user {current_user.id}, limit={limit}, offset={offset}")
     
     try:
@@ -737,7 +749,7 @@ async def list_text_to_video_jobs(
                         except Exception as e:
                             logger.warning(f"Failed to check status for job {job.id}: {e}")
         
-        return {
+        response = {
             "jobs": [
                 {
                     "job_id": str(job.id),
@@ -757,10 +769,10 @@ async def list_text_to_video_jobs(
             "total": len(jobs)
         }
         
-        # Cache for 1 minute
-        await set_cached(cache_key_str, result, ttl=60)
+        # Cache for 30 seconds (jobs list changes frequently)
+        await set_cached(cache_key_str, response, ttl=30)
         
-        return result
+        return response
         
     except Exception as e:
         logger.error(f"Error listing Text To Video jobs: {e}", exc_info=True)
@@ -779,8 +791,17 @@ async def list_all_video_jobs(
 ):
     """
     List all video jobs (both text-to-video and image-to-video) for the current user.
-    This is a shared endpoint for the unified gallery.
+    This is a shared endpoint for the unified gallery (cached for 15 seconds).
     """
+    from app.utils.cache import get_cached, set_cached, cache_key
+    
+    cache_key_str = cache_key("cache", "user", str(current_user.id), "all-video-jobs", str(limit), str(offset))
+    
+    # Try cache first
+    cached = await get_cached(cache_key_str)
+    if cached is not None:
+        return cached
+    
     logger.debug(f"Listing all video jobs for user {current_user.id}, limit={limit}, offset={offset}")
     
     try:
@@ -867,10 +888,15 @@ async def list_all_video_jobs(
                 "job_type": "text-to-video" if "-text-to-video" in job_data["job_provider"] else "image-to-video"
             })
         
-        return {
+        response = {
             "jobs": jobs_data,
             "total": len(jobs_data)
         }
+        
+        # Cache for 15 seconds (all-jobs is polled frequently)
+        await set_cached(cache_key_str, response, ttl=15)
+        
+        return response
         
     except Exception as e:
         logger.error(f"Error listing all video jobs: {e}", exc_info=True)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, memo, useCallback } from "react";
 
 interface VideoGalleryProps {
   jobs: any[];
@@ -9,7 +9,7 @@ interface VideoGalleryProps {
   onSelectJob: (job: any) => void;
 }
 
-export default function VideoGallery({ jobs, selectedJobId, loading = false, onSelectJob }: VideoGalleryProps) {
+function VideoGalleryInner({ jobs, selectedJobId, loading = false, onSelectJob }: VideoGalleryProps) {
   // Show loading skeletons when loading
   if (loading) {
     return (
@@ -413,3 +413,21 @@ export default function VideoGallery({ jobs, selectedJobId, loading = false, onS
     </section>
   );
 }
+
+// Memoized export to prevent re-renders when props haven't changed
+// Compare jobs by their serialized key to avoid unnecessary re-renders
+const VideoGallery = memo(VideoGalleryInner, (prevProps, nextProps) => {
+  // Custom comparison to avoid re-renders when jobs data is the same
+  if (prevProps.loading !== nextProps.loading) return false;
+  if (prevProps.selectedJobId !== nextProps.selectedJobId) return false;
+  
+  // Compare jobs by their key data (id, status, output_url)
+  if (prevProps.jobs.length !== nextProps.jobs.length) return false;
+  
+  const prevKey = prevProps.jobs.map(j => `${j.job_id}:${j.status}:${j.output_url || ''}`).join('|');
+  const nextKey = nextProps.jobs.map(j => `${j.job_id}:${j.status}:${j.output_url || ''}`).join('|');
+  
+  return prevKey === nextKey;
+});
+
+export default VideoGallery;

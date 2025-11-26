@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import clsx from 'clsx'
 import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react'
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,6 +31,13 @@ function page() {
      const [rateLimited, setRateLimited] = useState(false);
      const [loadingJobs, setLoadingJobs] = useState(true);
      const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+     const [jobStartTime, setJobStartTime] = useState<number | null>(null);
+     const [progress, setProgress] = useState(0);
+     
+     // Refs to track polling intervals for cleanup
+     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+     const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+     
      const audioInputRef = useRef<HTMLInputElement>(null);
      const audioDropRef = useRef<HTMLDivElement>(null);
      const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -63,6 +70,96 @@ function page() {
           }
           return shuffled;
      }
+
+     // Safe localStorage helpers (handle cases where localStorage might not be available)
+     const safeLocalStorage = {
+          getItem: (key: string): string | null => {
+               try {
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                         return window.localStorage.getItem(key);
+                    }
+               } catch (error) {
+                    console.warn("localStorage.getItem failed:", error);
+               }
+               return null;
+          },
+          setItem: (key: string, value: string): void => {
+               try {
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                         window.localStorage.setItem(key, value);
+                    }
+               } catch (error) {
+                    console.warn("localStorage.setItem failed:", error);
+               }
+          },
+          removeItem: (key: string): void => {
+               try {
+                    if (typeof window !== 'undefined' && window.localStorage) {
+                         window.localStorage.removeItem(key);
+                    }
+               } catch (error) {
+                    console.warn("localStorage.removeItem failed:", error);
+               }
+          }
+     };
+     
+     // Ref-based credit cache for synchronous access without re-renders
+     const creditCacheRef = useRef<Map<string, number>>(new Map());
+
+     // Cleanup function to clear any active polling intervals
+     const cleanupPolling = () => {
+          console.log("🧹 Cleaning up polling intervals...");
+          if (pollIntervalRef.current) {
+               clearInterval(pollIntervalRef.current);
+               pollIntervalRef.current = null;
+               console.log("✅ Cleared poll interval");
+          }
+          if (pollTimeoutRef.current) {
+               clearTimeout(pollTimeoutRef.current);
+               pollTimeoutRef.current = null;
+               console.log("✅ Cleared poll timeout");
+          }
+     };
+
+     // Cleanup on component unmount
+     useEffect(() => {
+          return () => {
+               cleanupPolling();
+          };
+     }, []);
+     
+     // Calculate progress based on elapsed time (slows down as it approaches 100%)
+     useEffect(() => {
+          if (!isGenerating || !jobStartTime || outputUrl) {
+               if (outputUrl) {
+                    setProgress(100);
+               }
+               return;
+          }
+
+          const updateProgress = () => {
+               const now = Date.now();
+               const elapsed = (now - jobStartTime) / 1000; // elapsed time in seconds
+               
+               // Estimate: typical video generation takes 60-180 seconds
+               // Use a curve that slows down as it approaches 100%
+               const estimatedTime = 120; // 2 minutes average
+               const rawProgress = 100 * (1 - Math.exp(-elapsed / estimatedTime));
+               
+               // Cap at 95% until actually completed
+               const cappedProgress = Math.min(rawProgress, 95);
+               
+               setProgress(Math.round(cappedProgress));
+          };
+
+          // Update immediately
+          updateProgress();
+          
+          // Update every second
+          const interval = setInterval(updateProgress, 1000);
+          
+          return () => clearInterval(interval);
+     }, [isGenerating, jobStartTime, outputUrl]);
 
      // Initialize gallery images with aspect ratios
      const MAX_GALLERY_IMAGES = 12;
@@ -128,7 +225,47 @@ function page() {
           return () => window.removeEventListener('resize', checkMobile);
      }, []);
 
-     // Load available models on mount
+     // Cache keys for localStorage
+     const MODELS_CACHE_KEY = 'ruxo_t2v_models';
+     const MODELS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours (matches backend Redis cache)
+     const CREDITS_CACHE_KEY = 'ruxo_t2v_credits';
+     const CREDITS_CACHE_TTL = 60 * 60 * 1000; // 1 hour (matches backend Redis cache)
+
+     // Initialize credit cache from localStorage on mount
+     useEffect(() => {
+          if (typeof window !== 'undefined') {
+               try {
+                    const stored = localStorage.getItem(CREDITS_CACHE_KEY);
+                    if (stored) {
+                         const { data, timestamp } = JSON.parse(stored);
+                         if (Date.now() - timestamp < CREDITS_CACHE_TTL) {
+                              setCreditCache(new Map(Object.entries(data)));
+                         } else {
+                              localStorage.removeItem(CREDITS_CACHE_KEY);
+                         }
+                    }
+               } catch (e) {
+                    // Ignore localStorage errors
+               }
+          }
+     }, []);
+
+     // Persist credit cache to localStorage when it changes
+     useEffect(() => {
+          if (typeof window !== 'undefined' && creditCache.size > 0) {
+               try {
+                    const data = Object.fromEntries(creditCache);
+                    localStorage.setItem(CREDITS_CACHE_KEY, JSON.stringify({
+                         data,
+                         timestamp: Date.now()
+                    }));
+               } catch (e) {
+                    // Ignore localStorage errors
+               }
+          }
+     }, [creditCache]);
+
+     // Load available models on mount (with localStorage cache)
      useEffect(() => {
           loadModels();
      }, []);
@@ -178,22 +315,64 @@ function page() {
      }, [selectedModel, duration]);
 
      const loadModels = async () => {
+          // Try localStorage cache first (models rarely change)
+          if (typeof window !== 'undefined') {
+               try {
+                    const stored = localStorage.getItem(MODELS_CACHE_KEY);
+                    if (stored) {
+                         const { data, timestamp } = JSON.parse(stored);
+                         if (Date.now() - timestamp < MODELS_CACHE_TTL && data.models?.length > 0) {
+                              setModels(data.models);
+                              setSelectedModel(data.models[0]);
+                              setSize(data.models[0].default_resolution);
+                              setDuration(data.models[0].default_duration);
+                              setLoadingModels(false);
+                              // Still refresh in background for freshness
+                              fetchModelsFromAPI(true);
+                              return;
+                         }
+                    }
+               } catch (e) {
+                    // Ignore cache errors, fetch from API
+               }
+          }
+          
+          await fetchModelsFromAPI(false);
+     };
+
+     const fetchModelsFromAPI = async (isBackgroundRefresh: boolean) => {
           try {
                const response = await fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/text-to-video/models`);
                const data = await response.json();
                
                if (response.ok && data.models) {
+                    // Cache to localStorage
+                    if (typeof window !== 'undefined') {
+                         try {
+                              localStorage.setItem(MODELS_CACHE_KEY, JSON.stringify({
+                                   data,
+                                   timestamp: Date.now()
+                              }));
+                         } catch (e) {
+                              // Ignore localStorage errors
+                         }
+                    }
+                    
                     setModels(data.models);
-                    if (data.models.length > 0) {
+                    if (!isBackgroundRefresh && data.models.length > 0) {
                          setSelectedModel(data.models[0]);
                          setSize(data.models[0].default_resolution);
                          setDuration(data.models[0].default_duration);
                     }
                }
           } catch (err) {
-               console.error("Error loading models:", err);
+               if (!isBackgroundRefresh) {
+                    console.error("Error loading models:", err);
+               }
           } finally {
-               setLoadingModels(false);
+               if (!isBackgroundRefresh) {
+                    setLoadingModels(false);
+               }
           }
      };
 
@@ -207,9 +386,9 @@ function page() {
           const modelId = selectedModel.id || selectedModel.name;
           const cacheKey = `${modelId}-${sizeValue}-${durationValue}`;
           
-          // Check cache first
-          if (creditCache.has(cacheKey)) {
-               return creditCache.get(cacheKey)!;
+          // Check ref cache first (synchronous, no re-render)
+          if (creditCacheRef.current.has(cacheKey)) {
+               return creditCacheRef.current.get(cacheKey)!;
           }
           
           // Check if API URL is available
@@ -232,7 +411,8 @@ function page() {
                if (response.ok) {
                     const data = await response.json();
                     const credits = data.credits || 0;
-                    // Cache the result - use functional update to ensure we get latest state
+                    // Cache in ref (no re-render) AND state (for UI update)
+                    creditCacheRef.current.set(cacheKey, credits);
                     setCreditCache(prev => {
                          const newCache = new Map(prev);
                          newCache.set(cacheKey, credits);
@@ -256,7 +436,7 @@ function page() {
           return 0;
      };
      
-     // Synchronous version for immediate display (uses cached value or returns 0)
+     // Synchronous version for immediate display (uses ref cache to avoid re-renders)
      const getRequiredCreditsSync = (sizeValue: string, durationValue: number): number => {
           if (!selectedModel) {
                return 0;
@@ -265,13 +445,19 @@ function page() {
           const modelId = selectedModel.id || selectedModel.name;
           const cacheKey = `${modelId}-${sizeValue}-${durationValue}`;
           
-          return creditCache.get(cacheKey) || 0;
+          // Use ref for synchronous access (doesn't cause re-render)
+          return creditCacheRef.current.get(cacheKey) || creditCache.get(cacheKey) || 0;
      };
 
      // Handle upgrade - redirect to pricing page
      const handleUpgrade = () => {
           router.push("/upgrade");
      };
+     
+     // Memoized callback for VideoGallery to prevent unnecessary re-renders
+     const handleSelectJob = useCallback((job: any) => {
+          setSelectedJob(job);
+     }, []);
 
      // Get button text and action
      const getButtonConfig = () => {
@@ -336,6 +522,9 @@ function page() {
           return () => clearInterval(jobsPollInterval);
      }, [user, rateLimited]);
 
+     // Ref to track previous jobs for comparison (avoid unnecessary re-renders)
+     const previousJobsRef = useRef<string>("");
+     
      const loadPreviousJobs = async () => {
           const token = getToken();
           if (!token) {
@@ -366,47 +555,135 @@ function page() {
                const data = await response.json();
 
                if (response.ok && data.jobs) {
-                    // Update both states together to prevent flash
-                    setPreviousJobs(data.jobs);
-                    setLoadingJobs(false);
-                    setHasLoadedOnce(true);
+                    // IMPORTANT: Only update state if jobs data actually changed
+                    // This prevents unnecessary re-renders that cause blinking
+                    const newJobsKey = data.jobs.map((j: any) => `${j.job_id}:${j.status}:${j.output_url || ''}`).join('|');
                     
-                    // Check status for jobs that are still pending/running but might be completed
-                    // Only check the first few jobs to avoid too many requests
-                    const jobsToCheck = data.jobs
-                         .filter((job: any) => (job.status === "pending" || job.status === "running") && !job.output_url)
-                         .slice(0, 3); // Only check up to 3 jobs at a time
+                    if (newJobsKey !== previousJobsRef.current) {
+                         previousJobsRef.current = newJobsKey;
+                         setPreviousJobs(data.jobs);
+                    }
                     
-                    jobsToCheck.forEach((job: any) => {
-                         // Only check if job was created more than 30 seconds ago (to avoid checking too early)
-                         const jobCreated = new Date(job.created_at);
-                         const now = new Date();
-                         const secondsSinceCreation = (now.getTime() - jobCreated.getTime()) / 1000;
-                         if (secondsSinceCreation > 30) {
-                              // Trigger a status check for jobs that might be completed
-                              pollJobStatus(job.job_id);
+                    // Always update loading state (but only once per mount)
+                    if (loadingJobs || !hasLoadedOnce) {
+                         setLoadingJobs(false);
+                         setHasLoadedOnce(true);
+                    }
+                    
+                    // Check for any pending/running jobs and automatically resume generation state
+                    const runningJob = data.jobs.find((job: any) => 
+                         (job.status === "pending" || job.status === "running") && !job.output_url
+                    );
+                    
+                    if (runningJob) {
+                         // Automatically resume generating state for running job
+                         const runningJobId = runningJob.job_id;
+                         
+                         // Set job ID if not already set
+                         if (!jobId) {
+                              setJobId(runningJobId);
                          }
-                    });
+                         
+                         // Restore job start time from localStorage or use creation time
+                         if (!jobStartTime && runningJob.created_at) {
+                              const storedStartTime = safeLocalStorage.getItem(`job_start_${runningJobId}`);
+                              if (storedStartTime) {
+                                   setJobStartTime(parseInt(storedStartTime));
+                              } else {
+                                   // Use job creation time as fallback
+                                   const createdTime = new Date(runningJob.created_at).getTime();
+                                   setJobStartTime(createdTime);
+                                   safeLocalStorage.setItem(`job_start_${runningJobId}`, createdTime.toString());
+                              }
+                         }
+                         
+                         // Resume generating state and polling
+                         if (!isGenerating) {
+                              setIsGenerating(true);
+                         }
+                         if (!isPolling && !pollIntervalRef.current) {
+                              console.log("🔄 Resuming polling for running job:", runningJobId);
+                              setIsPolling(true);
+                              pollJobStatus(runningJobId);
+                         }
+                    } else if (jobId) {
+                         // Check specific job if jobId is set
+                         const currentJob = data.jobs.find((job: any) => job.job_id === jobId);
+                         if (currentJob) {
+                              // Restore job start time from localStorage if not set
+                              if (!jobStartTime && currentJob.created_at) {
+                                   const storedStartTime = safeLocalStorage.getItem(`job_start_${jobId}`);
+                                   if (storedStartTime) {
+                                        setJobStartTime(parseInt(storedStartTime));
+                                   } else {
+                                        // Use job creation time as fallback
+                                        const createdTime = new Date(currentJob.created_at).getTime();
+                                        setJobStartTime(createdTime);
+                                        safeLocalStorage.setItem(`job_start_${jobId}`, createdTime.toString());
+                                   }
+                              }
+                              
+                              if ((currentJob.status === "pending" || currentJob.status === "running") && !currentJob.output_url) {
+                                   // Resume generating state and polling only if not already generating
+                                   if (!isGenerating) {
+                                        setIsGenerating(true);
+                                   }
+                                   if (!isPolling && !pollIntervalRef.current) {
+                                        console.log("🔄 Resuming polling for job:", jobId);
+                                        setIsPolling(true);
+                                        pollJobStatus(jobId);
+                                   }
+                              } else if (currentJob.status === "completed" && currentJob.output_url) {
+                                   // Job completed, stop generating
+                                   setOutputUrl(currentJob.output_url);
+                                   setJobStatus("completed");
+                                   setProgress(100);
+                                   setIsGenerating(false);
+                                   setIsPolling(false);
+                                   cleanupPolling();
+                                   // Clean up localStorage
+                                   safeLocalStorage.removeItem(`job_start_${jobId}`);
+                              } else if (currentJob.status === "failed") {
+                                   // Job failed
+                                   setError(currentJob.error || "Video generation failed");
+                                   setIsGenerating(false);
+                                   setIsPolling(false);
+                                   cleanupPolling();
+                                   // Clean up localStorage
+                                   safeLocalStorage.removeItem(`job_start_${jobId}`);
+                              }
+                         }
+                    }
                     
                     if (selectedJob) {
                          const updatedSelectedJob = data.jobs.find((job: any) => job.job_id === selectedJob.job_id);
                          if (updatedSelectedJob) {
-                              setSelectedJob(updatedSelectedJob);
-                              if (updatedSelectedJob.status === "completed" && updatedSelectedJob.output_url) {
-                                   setOutputUrl(updatedSelectedJob.output_url);
-                                   setJobStatus("completed");
+                              // Only update if something changed
+                              if (updatedSelectedJob.status !== selectedJob.status || 
+                                  updatedSelectedJob.output_url !== selectedJob.output_url) {
+                                   setSelectedJob(updatedSelectedJob);
+                                   if (updatedSelectedJob.status === "completed" && updatedSelectedJob.output_url) {
+                                        setOutputUrl(updatedSelectedJob.output_url);
+                                        setJobStatus("completed");
+                                   }
                               }
                          }
                     }
                } else {
                     // If response is not ok or no jobs, set empty array and stop loading
-                    setPreviousJobs([]);
+                    if (previousJobs.length > 0) {
+                         setPreviousJobs([]);
+                         previousJobsRef.current = "";
+                    }
                     setLoadingJobs(false);
                     setHasLoadedOnce(true);
                }
           } catch (err) {
                console.error("Error loading previous jobs:", err);
-               setPreviousJobs([]);
+               if (previousJobs.length > 0) {
+                    setPreviousJobs([]);
+                    previousJobsRef.current = "";
+               }
                setLoadingJobs(false);
                setHasLoadedOnce(true);
           }
@@ -493,10 +770,17 @@ function page() {
                return;
           }
 
+          // CRITICAL: Clean up any existing polling intervals before starting new generation
+          console.log("🔄 Starting new generation - cleaning up old polling intervals");
+          cleanupPolling();
+          setIsPolling(false);
+          
           // Set ref immediately to prevent double submission
           isSubmittingRef.current = true;
           setIsGenerating(true);
           setError(null);
+          setOutputUrl(null);
+          setJobStatus(null);
 
           try {
                const token = getToken();
@@ -540,6 +824,14 @@ function page() {
                console.log("Job submitted:", data);
                setJobId(data.job_id);
                setJobStatus("pending");
+               
+               // Store job start time for progress calculation (persists across refreshes)
+               const startTime = Date.now();
+               setJobStartTime(startTime);
+               if (data.job_id) {
+                    safeLocalStorage.setItem(`job_start_${data.job_id}`, startTime.toString());
+               }
+               
                setIsPolling(true);
                loadPreviousJobs();
                pollJobStatus(data.job_id);
@@ -552,67 +844,95 @@ function page() {
           }
      };
 
-     const pollJobStatus = async (jobId: string) => {
+     const pollJobStatus = async (jobIdToPoll: string) => {
           const token = getToken();
           if (!token) {
                setIsGenerating(false);
                return;
           }
 
-          let pollInterval: NodeJS.Timeout | null = null;
+          // Check if polling is already active
+          if (pollIntervalRef.current || pollTimeoutRef.current) {
+               console.warn("⚠️ Polling already active, cleaning up before starting new poll");
+               cleanupPolling();
+          }
+
+          const MAX_POLL_TIME = 10 * 60 * 1000; // 10 minutes total
+          const POLL_INTERVAL = 3000; // 3 seconds
+          const REQUEST_TIMEOUT = 10000; // 10 seconds per request
 
           const poll = async () => {
+               const abortController = new AbortController();
+               const requestTimeout = setTimeout(() => abortController.abort(), REQUEST_TIMEOUT);
+
                try {
-                    const response = await fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/text-to-video/status/${jobId}`, {
+                    const response = await fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/text-to-video/status/${jobIdToPoll}`, {
                          headers: {
                               "Authorization": `Bearer ${token}`
-                         }
+                         },
+                         signal: abortController.signal
                     });
 
+                    clearTimeout(requestTimeout);
                     const data = await response.json();
 
-                    if (!response.ok) {
-                         throw new Error(data.detail || "Failed to get job status");
-                    }
-
-                    setJobStatus(data.status);
-
-                    if (data.status === "completed" && data.output_url) {
-                         setOutputUrl(data.output_url);
-                         setIsGenerating(false);
-                         setIsPolling(false);
-                         isSubmittingRef.current = false; // Reset ref when completed
-                         if (pollInterval) clearInterval(pollInterval);
-                         console.log("Job completed:", data.output_url);
-                         loadPreviousJobs();
-                    } else if (data.status === "failed") {
-                         setError(data.error || "Job failed");
-                         setIsGenerating(false);
-                         setIsPolling(false);
-                         isSubmittingRef.current = false; // Reset ref on failure
-                         if (pollInterval) clearInterval(pollInterval);
-                    } else if (data.status === "running" || data.status === "pending") {
+                    if (response.ok && data) {
                          setJobStatus(data.status);
+
+                         if (data.status === "completed" && data.output_url) {
+                              setOutputUrl(data.output_url);
+                              setProgress(100);
+                              setIsGenerating(false);
+                              setIsPolling(false);
+                              isSubmittingRef.current = false;
+                              cleanupPolling();
+                              // Clean up localStorage
+                              if (jobIdToPoll) {
+                                   safeLocalStorage.removeItem(`job_start_${jobIdToPoll}`);
+                              }
+                              loadPreviousJobs();
+                         } else if (data.status === "failed") {
+                              setError(data.error || "Video generation failed");
+                              setIsGenerating(false);
+                              setIsPolling(false);
+                              isSubmittingRef.current = false;
+                              cleanupPolling();
+                              // Clean up localStorage
+                              if (jobIdToPoll) {
+                                   safeLocalStorage.removeItem(`job_start_${jobIdToPoll}`);
+                              }
+                         } else if (data.status === "running" || data.status === "pending") {
+                              setJobStatus(data.status);
+                         }
                     }
                } catch (err: any) {
-                    console.error("Error polling job status:", err);
-                    if (pollInterval) clearInterval(pollInterval);
-                    setIsGenerating(false);
-                    setIsPolling(false);
+                    clearTimeout(requestTimeout);
+                    if (err.name === 'AbortError') {
+                         console.warn("Request timeout during polling, will retry on next poll");
+                    } else {
+                         console.error("Error polling job status:", err);
+                    }
                }
           };
 
+          // Poll immediately, then every 3 seconds
           poll();
-          pollInterval = setInterval(poll, 3000);
+          pollIntervalRef.current = setInterval(poll, POLL_INTERVAL);
+          console.log("✅ Started polling interval:", pollIntervalRef.current);
 
-          setTimeout(() => {
-               if (pollInterval) clearInterval(pollInterval);
-               if (jobStatus !== "completed" && jobStatus !== "failed") {
-                    setError("Job timed out. Please check back later.");
+          // Overall timeout after 10 minutes
+          pollTimeoutRef.current = setTimeout(() => {
+               cleanupPolling();
+               const currentStatus = jobStatus;
+               if (currentStatus !== "completed" && currentStatus !== "failed") {
+                    setError("Job is taking longer than expected. You can check back later or refresh the page to see the status.");
                     setIsGenerating(false);
                     setIsPolling(false);
+                    isSubmittingRef.current = false;
+                    console.log("Polling timeout reached, but job may still be processing on the server");
                }
-          }, 300000);
+          }, MAX_POLL_TIME);
+          console.log("✅ Started polling timeout:", pollTimeoutRef.current);
      };
 
      return (
@@ -887,9 +1207,7 @@ function page() {
                                         jobs={[]}
                                         selectedJobId={selectedJob?.job_id}
                                         loading={true}
-                                        onSelectJob={(job) => {
-                                             setSelectedJob(job);
-                                        }}
+                                        onSelectJob={handleSelectJob}
                                    />
                               </div>
                          ) : previousJobs.length > 0 ? (
@@ -914,9 +1232,7 @@ function page() {
                                         jobs={previousJobs}
                                         selectedJobId={selectedJob?.job_id}
                                         loading={false}
-                                        onSelectJob={(job) => {
-                                             setSelectedJob(job);
-                                        }}
+                                        onSelectJob={handleSelectJob}
                                    />
                               </div>
                          ) : (

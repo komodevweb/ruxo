@@ -1987,3 +1987,483 @@
 }
 2025-11-26 04:45:58 - INFO - ====================================================================================================
 2025-11-26 04:45:58 - INFO - 
+2025-11-26 04:57:24 - INFO - ====================================================================================================
+2025-11-26 04:57:24 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 04:57:24 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 04:57:24 - INFO - HTTP Method: POST
+2025-11-26 04:57:24 - INFO - Request Payload:
+2025-11-26 04:57:24 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764125844,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "62.197.147.68",
+        "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "fbp": "fb.1.1763921999100.410712326901770084"
+      },
+      "event_source_url": "https://ruxo.ai/login"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 04:57:24 - INFO - ====================================================================================================
+2025-11-26 04:57:24 - INFO - ====================================================================================================
+2025-11-26 04:57:24 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 04:57:24 - INFO - HTTP Status Code: 200
+2025-11-26 04:57:24 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'AppoBXXtRnEDsEfSc2x7VA0', 'x-fb-trace-id': 'BAcWNNyJP/9', 'x-fb-rev': '1030371067', 'x-fb-debug': 'A9kUDqYFWXp8WZIIOvpTFdE7c+yzp/xPWR2X9qjNFSdHZ6PCKINDvWoQqHXzBwJQ2bMlOtFLAzl7+wmcGS19dw==', 'date': 'Wed, 26 Nov 2025 02:57:24 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=15, rtx=0, c=10, mss=1380, tbw=3485, tp=-1, tpl=-1, uplat=55, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 04:57:24 - INFO - Response Body:
+2025-11-26 04:57:24 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "AppoBXXtRnEDsEfSc2x7VA0"
+}
+2025-11-26 04:57:24 - INFO - ====================================================================================================
+2025-11-26 04:57:24 - INFO - 
+2025-11-26 04:57:36 - INFO - ====================================================================================================
+2025-11-26 04:57:36 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 04:57:36 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 04:57:36 - INFO - HTTP Method: POST
+2025-11-26 04:57:36 - INFO - Request Payload:
+2025-11-26 04:57:36 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764125856,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "62.197.147.68",
+        "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "fbp": "fb.1.1763921999100.410712326901770084"
+      },
+      "event_source_url": "https://ruxo.ai/login-email"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 04:57:36 - INFO - ====================================================================================================
+2025-11-26 04:57:36 - INFO - ====================================================================================================
+2025-11-26 04:57:36 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 04:57:36 - INFO - HTTP Status Code: 200
+2025-11-26 04:57:36 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'AVb-kHSxRGLB-E626VQjIgp', 'x-fb-trace-id': 'B4wYaqaxNoT', 'x-fb-rev': '1030371067', 'x-fb-debug': 'f3auPqvrPl8tq5CMLbNqyjxJc26RwMNImIV2m4qixc9lSgGJ3UL+iJjCskbXuPg/dd+uVuFmIlWWihAXJoSf0g==', 'date': 'Wed, 26 Nov 2025 02:57:36 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=10, rtx=0, c=10, mss=1380, tbw=3483, tp=-1, tpl=-1, uplat=49, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 04:57:36 - INFO - Response Body:
+2025-11-26 04:57:36 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "AVb-kHSxRGLB-E626VQjIgp"
+}
+2025-11-26 04:57:36 - INFO - ====================================================================================================
+2025-11-26 04:57:36 - INFO - 
+2025-11-26 04:57:39 - INFO - ====================================================================================================
+2025-11-26 04:57:39 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 04:57:39 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 04:57:39 - INFO - HTTP Method: POST
+2025-11-26 04:57:39 - INFO - Request Payload:
+2025-11-26 04:57:39 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764125859,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "62.197.147.68",
+        "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "fbp": "fb.1.1763921999100.410712326901770084"
+      },
+      "event_source_url": "https://ruxo.ai/login"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 04:57:39 - INFO - ====================================================================================================
+2025-11-26 04:57:39 - INFO - ====================================================================================================
+2025-11-26 04:57:39 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 04:57:39 - INFO - HTTP Status Code: 200
+2025-11-26 04:57:39 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'ANxcwMhXylad4rr3cW7zZwo', 'x-fb-trace-id': 'EHL49EuyxTs', 'x-fb-rev': '1030371067', 'x-fb-debug': 'SGbzgv47VRxFLLioausfTcQ6VcGvm0s25d92zIsVjh3xL2PgEXF/Hs5vTT/JL099gf3RwBkw/hH04MKs6PFKLg==', 'date': 'Wed, 26 Nov 2025 02:57:39 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=10, rtx=0, c=10, mss=1380, tbw=3484, tp=-1, tpl=-1, uplat=49, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 04:57:39 - INFO - Response Body:
+2025-11-26 04:57:39 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "ANxcwMhXylad4rr3cW7zZwo"
+}
+2025-11-26 04:57:39 - INFO - ====================================================================================================
+2025-11-26 04:57:39 - INFO - 
+2025-11-26 04:57:40 - INFO - ====================================================================================================
+2025-11-26 04:57:40 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 04:57:40 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 04:57:40 - INFO - HTTP Method: POST
+2025-11-26 04:57:40 - INFO - Request Payload:
+2025-11-26 04:57:40 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764125860,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "62.197.147.68",
+        "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "fbp": "fb.1.1763921999100.410712326901770084"
+      },
+      "event_source_url": "https://ruxo.ai/signup"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 04:57:40 - INFO - ====================================================================================================
+2025-11-26 04:57:40 - INFO - ====================================================================================================
+2025-11-26 04:57:40 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 04:57:40 - INFO - HTTP Status Code: 200
+2025-11-26 04:57:40 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'ALY9rTyleHe9SSJFsckk87d', 'x-fb-trace-id': 'A3ArSKnRkd1', 'x-fb-rev': '1030371067', 'x-fb-debug': '/yvM1EDtRyfKtuDNGeJPT4LUXO9NUnSufdFk6i/HyMQmaxTpdwiDUNaJbd/NM19P8BFZkDrzHCDBgxq1kx+gMw==', 'date': 'Wed, 26 Nov 2025 02:57:40 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=10, rtx=0, c=10, mss=1380, tbw=3485, tp=-1, tpl=-1, uplat=45, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 04:57:40 - INFO - Response Body:
+2025-11-26 04:57:40 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "ALY9rTyleHe9SSJFsckk87d"
+}
+2025-11-26 04:57:40 - INFO - ====================================================================================================
+2025-11-26 04:57:40 - INFO - 
+2025-11-26 04:57:41 - INFO - ====================================================================================================
+2025-11-26 04:57:41 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 04:57:41 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 04:57:41 - INFO - HTTP Method: POST
+2025-11-26 04:57:41 - INFO - Request Payload:
+2025-11-26 04:57:41 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764125861,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "62.197.147.68",
+        "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "fbp": "fb.1.1763921999100.410712326901770084"
+      },
+      "event_source_url": "https://ruxo.ai/signup-email"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 04:57:41 - INFO - ====================================================================================================
+2025-11-26 04:57:42 - INFO - ====================================================================================================
+2025-11-26 04:57:42 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 04:57:42 - INFO - HTTP Status Code: 200
+2025-11-26 04:57:42 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'AovnkAVhO5KRkkHD7ofz_Ck', 'x-fb-trace-id': 'C9QnK0KHCR4', 'x-fb-rev': '1030371067', 'x-fb-debug': 'xEIX3qEfqQOmT50/W6QwuK2/hWV8ZtMno4tgxMTwHvhjYHfgPgjG+h4sZO1xPq/2uDsTWzqhAP0IKJuN1LOSqQ==', 'date': 'Wed, 26 Nov 2025 02:57:42 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=10, rtx=0, c=10, mss=1380, tbw=3432, tp=-1, tpl=-1, uplat=40, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 04:57:42 - INFO - Response Body:
+2025-11-26 04:57:42 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "AovnkAVhO5KRkkHD7ofz_Ck"
+}
+2025-11-26 04:57:42 - INFO - ====================================================================================================
+2025-11-26 04:57:42 - INFO - 
+2025-11-26 04:57:51 - INFO - ====================================================================================================
+2025-11-26 04:57:51 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 04:57:51 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 04:57:51 - INFO - HTTP Method: POST
+2025-11-26 04:57:51 - INFO - Request Payload:
+2025-11-26 04:57:51 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764125871,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "62.197.147.68",
+        "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "fbp": "fb.1.1763921999100.410712326901770084"
+      },
+      "event_source_url": "https://ruxo.ai/signup-password"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 04:57:51 - INFO - ====================================================================================================
+2025-11-26 04:57:51 - INFO - ====================================================================================================
+2025-11-26 04:57:51 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 04:57:51 - INFO - HTTP Status Code: 200
+2025-11-26 04:57:51 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'AOgB4MbpJOrrM0x3VisMRXZ', 'x-fb-trace-id': 'CC/VFPiTNcy', 'x-fb-rev': '1030371067', 'x-fb-debug': 'Y2DGuOkANEh/D5V+zMNWB5SDrZYIhGfjsTe9SfDeNEetZvF8MXySU8l9paCE0jQtA/3elCEGUfXuJsZN9Me1ow==', 'date': 'Wed, 26 Nov 2025 02:57:51 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=9, rtx=0, c=10, mss=1380, tbw=3484, tp=-1, tpl=-1, uplat=46, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 04:57:51 - INFO - Response Body:
+2025-11-26 04:57:51 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "AOgB4MbpJOrrM0x3VisMRXZ"
+}
+2025-11-26 04:57:51 - INFO - ====================================================================================================
+2025-11-26 04:57:51 - INFO - 
+2025-11-26 05:02:41 - INFO - ====================================================================================================
+2025-11-26 05:02:41 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 05:02:41 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 05:02:41 - INFO - HTTP Method: POST
+2025-11-26 05:02:41 - INFO - Request Payload:
+2025-11-26 05:02:41 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764126161,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "62.93.167.89",
+        "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "fbp": "fb.1.1764126153060.444023464591666518"
+      },
+      "event_source_url": "https://ruxo.ai/signup"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 05:02:41 - INFO - ====================================================================================================
+2025-11-26 05:02:41 - INFO - ====================================================================================================
+2025-11-26 05:02:41 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 05:02:41 - INFO - HTTP Status Code: 200
+2025-11-26 05:02:41 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'ATf_POP6w_lILmyETqSOnNj', 'x-fb-trace-id': 'Hob+Fl5hH9F', 'x-fb-rev': '1030371067', 'x-fb-debug': 'ZX4iHboDowqnaXHVJG5yH7l1zWxJIs6QShOMsZ9res14HjNxYZnM3J7DSbCmnUtPBBS/G4TZ4Ftu7URLW6pMPA==', 'date': 'Wed, 26 Nov 2025 03:02:41 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=10, rtx=0, c=10, mss=1380, tbw=3485, tp=-1, tpl=-1, uplat=45, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 05:02:41 - INFO - Response Body:
+2025-11-26 05:02:41 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "ATf_POP6w_lILmyETqSOnNj"
+}
+2025-11-26 05:02:41 - INFO - ====================================================================================================
+2025-11-26 05:02:41 - INFO - 
+2025-11-26 05:02:58 - INFO - ====================================================================================================
+2025-11-26 05:02:58 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 05:02:58 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 05:02:58 - INFO - HTTP Method: POST
+2025-11-26 05:02:58 - INFO - Request Payload:
+2025-11-26 05:02:58 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764126178,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "62.93.167.89",
+        "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "fbp": "fb.1.1764126153060.444023464591666518"
+      },
+      "event_source_url": "https://ruxo.ai/signup"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 05:02:58 - INFO - ====================================================================================================
+2025-11-26 05:02:58 - INFO - ====================================================================================================
+2025-11-26 05:02:58 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 05:02:58 - INFO - HTTP Status Code: 200
+2025-11-26 05:02:58 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'At1akChzVMIOB5P8T5qW57a', 'x-fb-trace-id': 'GNNZjnyVLmk', 'x-fb-rev': '1030371067', 'x-fb-debug': 'gBAxSSwVbbc0/Gpv27YgjmBnfS1zWA6DhmFTymJ8mujNquhsWCLIhaIHMnK013BJZ6xXJObqEdhpuKBeNQKEYA==', 'date': 'Wed, 26 Nov 2025 03:02:58 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=10, rtx=0, c=10, mss=1380, tbw=3484, tp=-1, tpl=-1, uplat=44, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 05:02:58 - INFO - Response Body:
+2025-11-26 05:02:58 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "At1akChzVMIOB5P8T5qW57a"
+}
+2025-11-26 05:02:58 - INFO - ====================================================================================================
+2025-11-26 05:02:58 - INFO - 
+2025-11-26 05:03:12 - INFO - ====================================================================================================
+2025-11-26 05:03:12 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 05:03:12 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 05:03:12 - INFO - HTTP Method: POST
+2025-11-26 05:03:12 - INFO - Request Payload:
+2025-11-26 05:03:12 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764126192,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "62.93.167.89",
+        "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "fbp": "fb.1.1764126153060.444023464591666518"
+      },
+      "event_source_url": "https://ruxo.ai/signup-email"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 05:03:12 - INFO - ====================================================================================================
+2025-11-26 05:03:12 - INFO - ====================================================================================================
+2025-11-26 05:03:12 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 05:03:12 - INFO - HTTP Status Code: 200
+2025-11-26 05:03:12 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'AGxf4-0IiWetTHMZru9pn6g', 'x-fb-trace-id': 'EP5aOL8Icwg', 'x-fb-rev': '1030371067', 'x-fb-debug': 'MGxLmHIlq320nzccYtRSOxwdHmw3mhFVEHmjTTPTUyDwKhosLf60HAfI6S2BWc0tZxLVBDBlchBLtC8CGHEN+g==', 'date': 'Wed, 26 Nov 2025 03:03:12 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=9, rtx=0, c=10, mss=1380, tbw=3484, tp=-1, tpl=-1, uplat=50, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 05:03:12 - INFO - Response Body:
+2025-11-26 05:03:12 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "AGxf4-0IiWetTHMZru9pn6g"
+}
+2025-11-26 05:03:12 - INFO - ====================================================================================================
+2025-11-26 05:03:12 - INFO - 
+2025-11-26 05:03:17 - INFO - ====================================================================================================
+2025-11-26 05:03:17 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 05:03:17 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 05:03:17 - INFO - HTTP Method: POST
+2025-11-26 05:03:17 - INFO - Request Payload:
+2025-11-26 05:03:17 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764126197,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "62.93.167.89",
+        "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "fbp": "fb.1.1764126153060.444023464591666518"
+      },
+      "event_source_url": "https://ruxo.ai/signup-password"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 05:03:17 - INFO - ====================================================================================================
+2025-11-26 05:03:18 - INFO - ====================================================================================================
+2025-11-26 05:03:18 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 05:03:18 - INFO - HTTP Status Code: 200
+2025-11-26 05:03:18 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'AoM4fpfjd5jwcwaBR8_mdzy', 'x-fb-trace-id': 'GZszncSBiEX', 'x-fb-rev': '1030371067', 'x-fb-debug': 'mA6CVh0LHL3lE3WDJa8aKceZNTpae3DwGyJpTltqLNND/kbPzeXk4alFIGvSZX1Zix9qSKs+tpt1a0Ys4l/G6g==', 'date': 'Wed, 26 Nov 2025 03:03:18 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=15, rtx=0, c=10, mss=1380, tbw=3485, tp=-1, tpl=-1, uplat=58, ullat=1', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 05:03:18 - INFO - Response Body:
+2025-11-26 05:03:18 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "AoM4fpfjd5jwcwaBR8_mdzy"
+}
+2025-11-26 05:03:18 - INFO - ====================================================================================================
+2025-11-26 05:03:18 - INFO - 
+2025-11-26 05:06:14 - INFO - ====================================================================================================
+2025-11-26 05:06:14 - INFO - 📤 OUTGOING REQUEST - CompleteRegistration Event
+2025-11-26 05:06:14 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 05:06:14 - INFO - HTTP Method: POST
+2025-11-26 05:06:14 - INFO - Request Payload:
+2025-11-26 05:06:14 - INFO - {
+  "data": [
+    {
+      "event_name": "CompleteRegistration",
+      "event_time": 1764126374,
+      "action_source": "website",
+      "user_data": {
+        "em": "19c09ac45ad606b6d00e682810c5312218311f0dce306f87adaa150b4cd47a15",
+        "fn": "96d9632f363564cc3032521409cf22a852f2032eec099ed5967c0d000cec607a",
+        "external_id": "0259d7e7-bc84-4de3-8393-405be7832bc7",
+        "client_ip_address": "62.93.167.89",
+        "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "fbp": "fb.1.1764126153060.444023464591666518"
+      },
+      "event_source_url": "https://ruxo.ai/signup-password",
+      "event_id": "registration_0259d7e7-bc84-4de3-8393-405be7832bc7_1764126374"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 05:06:14 - INFO - ====================================================================================================
+2025-11-26 05:06:14 - INFO - ====================================================================================================
+2025-11-26 05:06:14 - INFO - 📥 INCOMING RESPONSE - CompleteRegistration Event
+2025-11-26 05:06:14 - INFO - HTTP Status Code: 200
+2025-11-26 05:06:14 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'AWGOoCWV8H9N7Dn5Ual6bsP', 'x-fb-trace-id': 'H4GH99D6WtJ', 'x-fb-rev': '1030371067', 'x-fb-debug': 'n1c2gxL0lT0QM0kpaDumx50ZW+S76zexKsz/MmxJ0l0xck36joz2ATcFgrnOc0+I+EH5Uax764MmZSU+Hik4dA==', 'date': 'Wed, 26 Nov 2025 03:06:14 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=10, rtx=0, c=10, mss=1380, tbw=3484, tp=-1, tpl=-1, uplat=42, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 05:06:14 - INFO - Response Body:
+2025-11-26 05:06:14 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "AWGOoCWV8H9N7Dn5Ual6bsP"
+}
+2025-11-26 05:06:14 - INFO - ====================================================================================================
+2025-11-26 05:06:14 - INFO - 
+2025-11-26 05:29:39 - INFO - ====================================================================================================
+2025-11-26 05:29:39 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 05:29:39 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 05:29:39 - INFO - HTTP Method: POST
+2025-11-26 05:29:39 - INFO - Request Payload:
+2025-11-26 05:29:39 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764127779,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "102.219.153.212",
+        "client_user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/142.0.7444.148 Mobile/15E148 Safari/604.1",
+        "fbp": "fb.1.1764007753349.89782302520996225"
+      },
+      "event_source_url": "https://ruxo.ai/signup"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 05:29:39 - INFO - ====================================================================================================
+2025-11-26 05:29:39 - INFO - ====================================================================================================
+2025-11-26 05:29:39 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 05:29:39 - INFO - HTTP Status Code: 200
+2025-11-26 05:29:39 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'ALR_4-BXfjB4P3vM35R2rPz', 'x-fb-trace-id': 'Fy5MEseSKpH', 'x-fb-rev': '1030373388', 'x-fb-debug': 'iU6LT9b/YLRkq7WCgObLJxVUPR52Y2028e2mRgE2sMEODDH+zglrkynFn36y78LcPCg6GcmvNiAdjKq9FWqtGQ==', 'date': 'Wed, 26 Nov 2025 03:29:39 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=15, rtx=0, c=10, mss=1380, tbw=3484, tp=-1, tpl=-1, uplat=51, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 05:29:39 - INFO - Response Body:
+2025-11-26 05:29:39 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "ALR_4-BXfjB4P3vM35R2rPz"
+}
+2025-11-26 05:29:39 - INFO - ====================================================================================================
+2025-11-26 05:29:39 - INFO - 
+2025-11-26 05:29:40 - INFO - ====================================================================================================
+2025-11-26 05:29:40 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 05:29:40 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 05:29:40 - INFO - HTTP Method: POST
+2025-11-26 05:29:40 - INFO - Request Payload:
+2025-11-26 05:29:40 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764127780,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "102.219.153.212",
+        "client_user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/142.0.7444.148 Mobile/15E148 Safari/604.1",
+        "fbp": "fb.1.1764007753349.89782302520996225"
+      },
+      "event_source_url": "https://ruxo.ai/signup-email"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 05:29:40 - INFO - ====================================================================================================
+2025-11-26 05:29:40 - INFO - ====================================================================================================
+2025-11-26 05:29:40 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 05:29:40 - INFO - HTTP Status Code: 200
+2025-11-26 05:29:40 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'AVUCKDwSssNZcT8t0Kx8qW0', 'x-fb-trace-id': 'DvCd1ME/kMC', 'x-fb-rev': '1030373388', 'x-fb-debug': 'YLyRHW51wxZoAlK9rAU3QzQfkyzjm/8IHHPQPMV2FZ5gJp+ZYcUbdibrn//UwTxxJlFZfqeRTuQOYk6ZZQsV6g==', 'date': 'Wed, 26 Nov 2025 03:29:40 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=10, rtx=0, c=10, mss=1380, tbw=3484, tp=-1, tpl=-1, uplat=51, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 05:29:40 - INFO - Response Body:
+2025-11-26 05:29:40 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "AVUCKDwSssNZcT8t0Kx8qW0"
+}
+2025-11-26 05:29:40 - INFO - ====================================================================================================
+2025-11-26 05:29:40 - INFO - 
+2025-11-26 05:48:14 - INFO - ====================================================================================================
+2025-11-26 05:48:14 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-26 05:48:14 - INFO - URL: https://graph.facebook.com/v21.0/1891419421775375/events
+2025-11-26 05:48:14 - INFO - HTTP Method: POST
+2025-11-26 05:48:14 - INFO - Request Payload:
+2025-11-26 05:48:14 - INFO - {
+  "data": [
+    {
+      "event_name": "ViewContent",
+      "event_time": 1764128894,
+      "action_source": "website",
+      "user_data": {
+        "client_ip_address": "62.93.167.89",
+        "client_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "fbp": "fb.1.1763921999100.410712326901770084"
+      },
+      "event_source_url": "https://ruxo.ai/login"
+    }
+  ],
+  "access_token": "EAAPOZBXZA...ZDZD"
+}
+2025-11-26 05:48:14 - INFO - ====================================================================================================
+2025-11-26 05:48:14 - INFO - ====================================================================================================
+2025-11-26 05:48:14 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-26 05:48:14 - INFO - HTTP Status Code: 200
+2025-11-26 05:48:14 - INFO - Response Headers: {'content-type': 'application/json; charset=UTF-8', 'vary': 'Origin', 'x-fb-aed': '659', 'x-ad-api-version-warning': 'You are calling a deprecated version of the Ads API.', 'cross-origin-resource-policy': 'cross-origin', 'x-app-usage': '{"call_count":0,"total_cputime":0,"total_time":0}', 'access-control-allow-origin': '*', 'facebook-api-version': 'v21.0', 'strict-transport-security': 'max-age=15552000; preload', 'pragma': 'no-cache', 'cache-control': 'private, no-cache, no-store, must-revalidate', 'expires': 'Sat, 01 Jan 2000 00:00:00 GMT', 'x-fb-request-id': 'AtMjGr-wfW2WL2ntTYOKkr4', 'x-fb-trace-id': 'ENszOh544mq', 'x-fb-rev': '1030373388', 'x-fb-debug': '+pntMOpCPVvdaiRRcZYPaNQGROjWgyWSvyr+k/CkSiqT+rsFlLiABmRU/eiUicGrs83q4RM3ZrI0DfJULeLXqQ==', 'date': 'Wed, 26 Nov 2025 03:48:14 GMT', 'x-fb-connection-quality': 'EXCELLENT; q=0.9, rtt=15, rtx=0, c=10, mss=1380, tbw=3485, tp=-1, tpl=-1, uplat=77, ullat=0', 'alt-svc': 'h3=":443"; ma=86400', 'connection': 'keep-alive', 'content-length': '74'}
+2025-11-26 05:48:14 - INFO - Response Body:
+2025-11-26 05:48:14 - INFO - {
+  "events_received": 1,
+  "messages": [],
+  "fbtrace_id": "AtMjGr-wfW2WL2ntTYOKkr4"
+}
+2025-11-26 05:48:14 - INFO - ====================================================================================================
+2025-11-26 05:48:14 - INFO - 
