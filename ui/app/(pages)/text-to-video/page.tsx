@@ -198,8 +198,10 @@ function page() {
           { label: "480p (Portrait)", value: "480*832" },
           { label: "720p (Landscape)", value: "1280*720" },
           { label: "720p (Portrait)", value: "720*1280" },
-          { label: "1080p (Landscape)", value: "1920*1080" },
-          { label: "1080p (Portrait)", value: "1080*1920" },
+          { label: "1080p (Landscape)", value: "1920*1080" },  // For other models
+          { label: "1080p (Portrait)", value: "1080*1920" },  // For other models
+          { label: "1080p (Landscape)", value: "1792*1024" },  // Sora 2 Pro specific
+          { label: "1080p (Portrait)", value: "1024*1792" },  // Sora 2 Pro specific
      ];
 
      // Get available resolutions for selected model

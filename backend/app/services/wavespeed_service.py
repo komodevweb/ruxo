@@ -614,6 +614,7 @@ class WaveSpeedService:
             image_url: URL to the input image (required)
             prompt: The positive prompt for generation (required)
             resolution: Video resolution. Options: "720p", "1080p" (default: "720p")
+                       Will be converted to size format: 720p -> "1280*720", 1080p -> "1792*1024"
             duration: Video duration in seconds (4, 8, 12, default: 4)
         
         Returns:
@@ -622,7 +623,17 @@ class WaveSpeedService:
         if not self.api_key:
             raise ValueError("WaveSpeed API key not configured")
         
-        logger.info(f"Submitting OpenAI Sora 2 Pro Image To Video job: resolution={resolution}, duration={duration}")
+        # Convert resolution to size format (matching text-to-video API)
+        # 720p can be landscape (1280*720) or portrait (720*1280)
+        # 1080p can be landscape (1792*1024) or portrait (1024*1792)
+        # Default to landscape for simplicity
+        size_mapping = {
+            "720p": "1280*720",
+            "1080p": "1792*1024"
+        }
+        size = size_mapping.get(resolution, "1280*720")
+        
+        logger.info(f"Submitting OpenAI Sora 2 Pro Image To Video job: resolution={resolution} -> size={size}, duration={duration}")
         logger.info(f"Image URL: {image_url}")
         logger.info(f"Prompt: {prompt}")
         
@@ -631,7 +642,7 @@ class WaveSpeedService:
         payload = {
             "image": image_url,
             "prompt": prompt,
-            "resolution": resolution,
+            "size": size,
             "duration": duration
         }
         

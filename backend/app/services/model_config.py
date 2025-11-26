@@ -95,7 +95,8 @@ class ModelConfig:
             }
             # Determine resolution tier
             width, height = map(int, resolution.split('*'))
-            if width <= 1280 or height <= 1280:  # 720p
+            # 720p: both dimensions <= 1280, 1080p: either dimension > 1280
+            if width <= 1280 and height <= 1280:  # 720p
                 tier = "720p"
             else:  # 1080p
                 tier = "1080p"
@@ -233,7 +234,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         name="openai-sora-2-pro",
         display_name="OpenAI Sora 2 Pro",
         api_endpoint="/openai/sora-2/text-to-video-pro",
-        supported_resolutions=["1280*720", "720*1280", "1920*1080", "1080*1920"],
+        supported_resolutions=["1280*720", "720*1280", "1792*1024", "1024*1792"],
         supported_durations=[4, 8, 12],
         supports_audio=False,
         supports_negative_prompt=False,  # Sora 2 Pro does not support negative prompts
