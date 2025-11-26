@@ -634,11 +634,11 @@ export default function ImagePage() {
                               </div>
                          </div>
 
-                         <div className="flex flex-wrap items-center justify-between gap-3 md:gap-4 pt-2 border-t border-white/5 mt-4">
-                              <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+                         <div className="flex flex-wrap items-center justify-start sm:justify-between gap-2 md:gap-4 pt-2 border-t border-white/5 mt-4">
+                              <div className="flex items-center gap-1.5 md:gap-3 flex-wrap flex-1 min-w-0">
                                    {/* Model Dropdown */}
                                    {loadingModels || authLoading ? (
-                                        <div className="relative w-32 md:w-40 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
+                                        <div className="relative w-24 sm:w-32 md:w-40 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
                                              <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
                                         </div>
                                    ) : selectedModel && models.length > 0 ? (
@@ -682,7 +682,7 @@ export default function ImagePage() {
 
                                    {/* Aspect Ratio Dropdown */}
                                    {loadingModels || authLoading ? (
-                                        <div className="relative w-16 md:w-20 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
+                                        <div className="relative w-12 sm:w-16 md:w-20 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
                                              <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
                                         </div>
                                    ) : selectedModel?.supports_aspect_ratio && (
@@ -710,7 +710,7 @@ export default function ImagePage() {
 
                                    {/* Resolution Dropdown */}
                                    {loadingModels || authLoading ? (
-                                        <div className="relative w-16 md:w-20 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
+                                        <div className="relative w-12 sm:w-16 md:w-20 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
                                              <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
                                         </div>
                                    ) : selectedModel?.supports_resolution && (
@@ -738,7 +738,7 @@ export default function ImagePage() {
 
                                    {/* Output Format Dropdown */}
                                    {loadingModels || authLoading ? (
-                                        <div className="relative w-16 md:w-20 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
+                                        <div className="relative w-12 sm:w-16 md:w-20 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
                                              <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
                                         </div>
                                    ) : selectedModel?.supports_output_format && (
@@ -766,7 +766,7 @@ export default function ImagePage() {
                               </div>
 
                               {loadingModels || authLoading ? (
-                                   <div className="relative w-full sm:w-32 h-11 bg-white/5 rounded-xl overflow-hidden">
+                                   <div className="relative w-full sm:w-auto sm:min-w-[100px] md:w-32 h-11 bg-white/5 rounded-xl overflow-hidden shrink-0">
                                         <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
                                    </div>
                               ) : (
