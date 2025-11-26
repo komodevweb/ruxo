@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api";
-import { trackInitiateCheckout } from "@/lib/facebookTracking";
+import { trackInitiateCheckout, trackAddToCart } from "@/lib/facebookTracking";
 
 interface Plan {
      id: string;
@@ -37,6 +37,15 @@ function page() {
      useEffect(() => {
           fetchPlans();
      }, []);
+     
+     // Track AddToCart event when user visits the upgrade page
+     useEffect(() => {
+          // Track AddToCart event for Facebook Conversions API
+          trackAddToCart(window.location.href).catch((error) => {
+               // Silently fail - tracking should not block page functionality
+               console.debug('Failed to track AddToCart on page load:', error);
+          });
+     }, []); // Only run once on mount
      
      
      // Refresh user data when page loads to ensure we have latest subscription info

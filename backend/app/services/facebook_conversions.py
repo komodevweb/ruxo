@@ -103,8 +103,17 @@ class FacebookConversionsService:
         
         return event_data
     
-    def _get_custom_data(self, currency: Optional[str] = None, value: Optional[float] = None) -> Dict[str, Any]:
-        """Build custom_data object for Facebook Conversions API (used for Purchase events)."""
+    def _get_custom_data(
+        self, 
+        currency: Optional[str] = None, 
+        value: Optional[float] = None,
+        content_ids: Optional[List[str]] = None,
+        content_name: Optional[str] = None,
+        content_type: Optional[str] = None,
+        contents: Optional[List[Dict[str, Any]]] = None,
+        num_items: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Build custom_data object for Facebook Conversions API (used for Purchase, AddToCart events)."""
         custom_data = {}
         
         if currency:
@@ -112,6 +121,21 @@ class FacebookConversionsService:
         
         if value is not None:
             custom_data["value"] = value
+        
+        if content_ids:
+            custom_data["content_ids"] = content_ids
+        
+        if content_name:
+            custom_data["content_name"] = content_name
+        
+        if content_type:
+            custom_data["content_type"] = content_type
+        
+        if contents:
+            custom_data["contents"] = contents
+        
+        if num_items is not None:
+            custom_data["num_items"] = num_items
         
         return custom_data
     
@@ -180,6 +204,39 @@ class FacebookConversionsService:
                 logger.info(f"  - client_user_agent: {'✓' if user_data.get('client_user_agent') else '✗'}")
                 logger.info(f"  - fbp: {'✓' if user_data.get('fbp') else '✗'}")
                 logger.info(f"  - fbc: {'✓' if user_data.get('fbc') else '✗'}")
+            
+            # Log AddToCart event details for debugging
+            if event_name == "AddToCart":
+                value = custom_data.get("value") if custom_data else None
+                currency = custom_data.get("currency") if custom_data else None
+                content_ids = custom_data.get("content_ids") if custom_data else None
+                content_name = custom_data.get("content_name") if custom_data else None
+                content_type = custom_data.get("content_type") if custom_data else None
+                contents = custom_data.get("contents") if custom_data else None
+                num_items = custom_data.get("num_items") if custom_data else None
+                event_url = event_data.get("event_source_url") if event_data else None
+                logger.info(f"🛒 AddToCart Event Details: value={value}, currency={currency}, content_ids={content_ids}, content_name={content_name}, content_type={content_type}, num_items={num_items}, url={event_url}, user={user_data.get('em', 'N/A')[:10]}..., external_id={user_data.get('external_id', 'N/A')}")
+                
+                # Log all user_data fields for verification
+                logger.info(f"📊 AddToCart User Data Fields:")
+                logger.info(f"  - em (email): {'✓' if user_data.get('em') else '✗'}")
+                logger.info(f"  - fn (first name): {'✓' if user_data.get('fn') else '✗'}")
+                logger.info(f"  - ln (last name): {'✓' if user_data.get('ln') else '✗'}")
+                logger.info(f"  - external_id: {'✓' if user_data.get('external_id') else '✗'}")
+                logger.info(f"  - client_ip_address: {'✓' if user_data.get('client_ip_address') else '✗'}")
+                logger.info(f"  - client_user_agent: {'✓' if user_data.get('client_user_agent') else '✗'}")
+                logger.info(f"  - fbp: {'✓' if user_data.get('fbp') else '✗'}")
+                logger.info(f"  - fbc: {'✓' if user_data.get('fbc') else '✗'}")
+                
+                # Log all custom_data fields for verification
+                logger.info(f"📦 AddToCart Custom Data Fields:")
+                logger.info(f"  - currency: {'✓' if currency else '✗'}")
+                logger.info(f"  - value: {'✓' if value is not None else '✗'}")
+                logger.info(f"  - content_ids: {'✓' if content_ids else '✗'}")
+                logger.info(f"  - content_name: {'✓' if content_name else '✗'}")
+                logger.info(f"  - content_type: {'✓' if content_type else '✗'}")
+                logger.info(f"  - contents: {'✓' if contents else '✗'}")
+                logger.info(f"  - num_items: {'✓' if num_items is not None else '✗'}")
             
             # Build the request payload
             payload = {
@@ -388,7 +445,7 @@ class FacebookConversionsService:
             event_name="Purchase",
             user_data=user_data,
             event_data=event_data,
-            custom_data=custom_data,
+            custom_data=custom_data if custom_data else None,
             event_id=event_id,
         )
     
@@ -462,5 +519,69 @@ class FacebookConversionsService:
             event_name="ViewContent",
             user_data=user_data,
             event_data=event_data,
+        )
+    
+    async def track_add_to_cart(
+        self,
+        currency: Optional[str] = "USD",
+        value: Optional[float] = None,
+        content_ids: Optional[List[str]] = None,
+        content_name: Optional[str] = None,
+        content_type: Optional[str] = None,
+        contents: Optional[List[Dict[str, Any]]] = None,
+        num_items: Optional[int] = None,
+        email: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        external_id: Optional[str] = None,
+        client_ip: Optional[str] = None,
+        client_user_agent: Optional[str] = None,
+        fbp: Optional[str] = None,
+        fbc: Optional[str] = None,
+        event_source_url: Optional[str] = None,
+        event_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Track AddToCart event for SaaS subscription page.
+        
+        Sends all Meta-recommended parameters including:
+        - User data: email, first_name, last_name, external_id, client_ip, user_agent, fbp, fbc
+        - Custom data: currency, value, content_ids, content_name, content_type, contents, num_items
+        - Event data: event_source_url
+        - Event ID: for deduplication (if provided)
+        
+        All PII (email, names) are automatically SHA-256 hashed before sending.
+        """
+        user_data = self._get_user_data(
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            external_id=external_id,
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            fbp=fbp,
+            fbc=fbc,
+        )
+        
+        event_data = self._get_event_data(
+            event_source_url=event_source_url,
+        )
+        
+        custom_data = self._get_custom_data(
+            currency=currency,
+            value=value,
+            content_ids=content_ids,
+            content_name=content_name,
+            content_type=content_type,
+            contents=contents,
+            num_items=num_items,
+        )
+        
+        return await self.send_event(
+            event_name="AddToCart",
+            user_data=user_data,
+            event_data=event_data,
+            custom_data=custom_data if custom_data else None,
+            event_id=event_id,
         )
 

@@ -265,6 +265,74 @@ async def track_view_content(
         logger.error(f"Failed to track ViewContent event: {str(e)}", exc_info=True)
         return {"status": "error", "message": str(e)}
 
+@router.post("/track-add-to-cart")
+async def track_add_to_cart(
+    request: Request,
+    current_user: Optional[UserProfile] = Depends(get_current_user_optional),
+):
+    """Track AddToCart event for Facebook Conversions API.
+    
+    Note: Authentication is optional - we track for both authenticated and anonymous users.
+    """
+    try:
+        from app.services.facebook_conversions import FacebookConversionsService
+        
+        # Get client IP and user agent
+        client_ip = get_client_ip(request)
+        client_user_agent = request.headers.get("user-agent")
+        
+        # Get fbp and fbc cookies if available
+        fbp = request.cookies.get("_fbp")
+        fbc = request.cookies.get("_fbc")
+        
+        # Get event_source_url from query params or use referer
+        event_source_url = request.query_params.get("url") or request.headers.get("referer") or f"{settings.FRONTEND_URL}/upgrade"
+        
+        logger.info(f"AddToCart tracking request - URL: {event_source_url}, User: {current_user.id if current_user else 'anonymous'}")
+        
+        conversions_service = FacebookConversionsService()
+        
+        # Extract first and last name from display_name if available (for authenticated users)
+        first_name = None
+        last_name = None
+        if current_user and current_user.display_name:
+            name_parts = current_user.display_name.split(maxsplit=1)
+            first_name = name_parts[0] if name_parts else None
+            last_name = name_parts[1] if len(name_parts) > 1 else None
+        
+        # Generate event_id for deduplication
+        import time
+        event_id = f"addtocart_{int(time.time())}_{current_user.id if current_user else 'anonymous'}"
+        
+        # Track event (fire and forget)
+        import asyncio
+        asyncio.create_task(conversions_service.track_add_to_cart(
+            currency="USD",
+            value=None,  # Optional - we don't know which plan they'll select yet
+            content_ids=["ruxo_subscription"],  # SaaS subscription identifier
+            content_name="Ruxo Subscription Plan",  # SaaS-specific content name
+            content_type="subscription",  # SaaS subscription type (not "product")
+            contents=None,  # Optional - can be set if we have specific plan details
+            num_items=1,  # User is viewing subscription plans
+            email=current_user.email if current_user else None,
+            first_name=first_name,  # Include user's first name
+            last_name=last_name,  # Include user's last name
+            external_id=str(current_user.id) if current_user else None,
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            fbp=fbp,
+            fbc=fbc,
+            event_source_url=event_source_url,
+            event_id=event_id,
+        ))
+        
+        logger.info(f"Triggered AddToCart event tracking for URL: {event_source_url}")
+        
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Failed to track AddToCart event: {str(e)}", exc_info=True)
+        return {"status": "error", "message": str(e)}
+
 @router.post("/test-purchase")
 async def test_purchase(
     request: Request,

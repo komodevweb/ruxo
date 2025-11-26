@@ -46,3 +46,20 @@ export async function trackInitiateCheckout(eventSource?: string): Promise<void>
   }
 }
 
+/**
+ * Track AddToCart event
+ * @param url - Optional URL of the page where the event occurred
+ */
+export async function trackAddToCart(url?: string): Promise<void> {
+  try {
+    const params = url ? new URLSearchParams({ url }) : undefined;
+    const endpoint = `/billing/track-add-to-cart${params ? `?${params.toString()}` : ''}`;
+    console.debug('Tracking AddToCart:', endpoint);
+    await apiClient.post(endpoint);
+    console.debug('AddToCart tracked successfully');
+  } catch (error) {
+    // Log error but don't block page functionality
+    console.warn('Failed to track AddToCart:', error);
+  }
+}
+
