@@ -521,7 +521,7 @@ export default function ImagePage() {
                     </h1>
 
                     {/* Input Area */}
-                    <div className="bg-black-1000 rounded-2xl p-6 border border-white/10 mb-12 shadow-2xl">
+                    <div className="bg-black-1000 rounded-2xl p-4 md:p-6 border border-white/10 mb-12 shadow-2xl">
                          {/* Error Message */}
                          {error && (
                               <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
@@ -529,13 +529,13 @@ export default function ImagePage() {
                               </div>
                          )}
                          
-                         <div className="flex items-center gap-8 mb-6 border-b border-white/5 pb-4">
+                         <div className="flex items-center gap-4 md:gap-8 mb-6 border-b border-white/5 pb-4">
                               {loadingModels || authLoading ? (
                                    <>
-                                        <div className="relative w-32 h-9 bg-white/5 rounded-lg overflow-hidden">
+                                        <div className="relative w-28 md:w-32 h-9 bg-white/5 rounded-lg overflow-hidden">
                                              <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
                                         </div>
-                                        <div className="relative w-28 h-9 bg-white/5 rounded-lg overflow-hidden">
+                                        <div className="relative w-24 md:w-28 h-9 bg-white/5 rounded-lg overflow-hidden">
                                              <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
                                         </div>
                                    </>
@@ -563,9 +563,9 @@ export default function ImagePage() {
                               )}
                          </div>
 
-                         <div className="flex gap-4 mb-6">
+                         <div className="flex flex-col sm:flex-row gap-4 mb-6">
                               {mode === "image-to-image" && (
-                                   <div className="flex flex-col gap-2 w-48 shrink-0">
+                                   <div className="flex flex-col gap-2 w-full sm:w-48 shrink-0">
                                         {imagePreview ? (
                                              <div className="relative h-full min-h-[100px] rounded-xl overflow-hidden border border-white/10">
                                                   <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
@@ -634,11 +634,11 @@ export default function ImagePage() {
                               </div>
                          </div>
 
-                         <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-white/5 mt-4">
-                              <div className="flex items-center gap-3">
+                         <div className="flex flex-wrap items-center justify-between gap-3 md:gap-4 pt-2 border-t border-white/5 mt-4">
+                              <div className="flex items-center gap-2 md:gap-3 flex-wrap">
                                    {/* Model Dropdown */}
                                    {loadingModels || authLoading ? (
-                                        <div className="relative w-40 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
+                                        <div className="relative w-32 md:w-40 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
                                              <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
                                         </div>
                                    ) : selectedModel && models.length > 0 ? (
@@ -682,7 +682,7 @@ export default function ImagePage() {
 
                                    {/* Aspect Ratio Dropdown */}
                                    {loadingModels || authLoading ? (
-                                        <div className="relative w-20 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
+                                        <div className="relative w-16 md:w-20 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
                                              <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
                                         </div>
                                    ) : selectedModel?.supports_aspect_ratio && (
@@ -710,7 +710,7 @@ export default function ImagePage() {
 
                                    {/* Resolution Dropdown */}
                                    {loadingModels || authLoading ? (
-                                        <div className="relative w-20 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
+                                        <div className="relative w-16 md:w-20 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
                                              <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
                                         </div>
                                    ) : selectedModel?.supports_resolution && (
@@ -738,7 +738,7 @@ export default function ImagePage() {
 
                                    {/* Output Format Dropdown */}
                                    {loadingModels || authLoading ? (
-                                        <div className="relative w-20 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
+                                        <div className="relative w-16 md:w-20 h-8 bg-white/5 border border-white/10 rounded-lg overflow-hidden">
                                              <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
                                         </div>
                                    ) : selectedModel?.supports_output_format && (
@@ -766,7 +766,7 @@ export default function ImagePage() {
                               </div>
 
                               {loadingModels || authLoading ? (
-                                   <div className="relative w-32 h-11 bg-white/5 rounded-xl overflow-hidden">
+                                   <div className="relative w-full sm:w-32 h-11 bg-white/5 rounded-xl overflow-hidden">
                                         <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
                                    </div>
                               ) : (
@@ -774,6 +774,17 @@ export default function ImagePage() {
                                    onClick={async () => {
                                         if (!user) {
                                              router.push("/signup");
+                                             return;
+                                        }
+                                        
+                                        // Check subscription and credits
+                                        const hasSubscription = !!user.plan_name;
+                                        const modelId = selectedModel?.id;
+                                        const requiredCredits = modelId ? getRequiredCreditsSync(modelId, selectedResolution) : 0;
+                                        const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
+                                        
+                                        if (!hasSubscription || !hasEnoughCredits) {
+                                             router.push("/upgrade");
                                              return;
                                         }
                                         
@@ -943,11 +954,39 @@ export default function ImagePage() {
                                              setError(error.message || "Failed to generate image. Please try again.");
                                         }
                                    }}
-                                   disabled={!!user && (isGenerating || imageUploading || !prompt.trim() || !selectedModel || (mode === "image-to-image" && !imageFile && !imageUrl))}
+                                   disabled={(() => {
+                                        // Don't disable if user needs to upgrade
+                                        if (user) {
+                                             const hasSubscription = !!user.plan_name;
+                                             const modelId = selectedModel?.id;
+                                             const requiredCredits = modelId ? getRequiredCreditsSync(modelId, selectedResolution) : 0;
+                                             const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
+                                             
+                                             // If no subscription or not enough credits, button should be clickable to go to upgrade
+                                             if (!hasSubscription || !hasEnoughCredits) {
+                                                  return false;
+                                             }
+                                        }
+                                        
+                                        // Disable only if user is logged in, has subscription/credits, but missing required fields
+                                        return !!user && (isGenerating || imageUploading || !prompt.trim() || !selectedModel || (mode === "image-to-image" && !imageFile && !imageUrl));
+                                   })()}
                                    className={clsx(
                                         "flex items-center gap-2 text-sm font-bold py-2.5 px-5 rounded-xl transition-all duration-300 shadow-3xl hover:shadow-7xl hover:-translate-y-0.5 bg1 text-black",
-                                        // Only show disabled styling for logged in users when fields are missing
-                                        user && (isGenerating || imageUploading || !prompt.trim() || !selectedModel || (mode === "image-to-image" && !imageFile && !imageUrl)) 
+                                        // Only show disabled styling when actually disabled
+                                        (() => {
+                                             if (user) {
+                                                  const hasSubscription = !!user.plan_name;
+                                                  const modelId = selectedModel?.id;
+                                                  const requiredCredits = modelId ? getRequiredCreditsSync(modelId, selectedResolution) : 0;
+                                                  const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
+                                                  
+                                                  if (!hasSubscription || !hasEnoughCredits) {
+                                                       return false; // Not disabled, should be clickable
+                                                  }
+                                             }
+                                             return !!user && (isGenerating || imageUploading || !prompt.trim() || !selectedModel || (mode === "image-to-image" && !imageFile && !imageUrl));
+                                        })() 
                                              ? "cursor-not-allowed" 
                                              : ""
                                    )}
@@ -957,10 +996,22 @@ export default function ImagePage() {
                                         if (isGenerating) return "Generating...";
                                         if (!user) return "Generate";
                                         if (!selectedModel) return "Generate";
+                                        
+                                        const hasSubscription = !!user.plan_name;
                                         const modelId = selectedModel.id;
-                                        const credits = getRequiredCreditsSync(modelId, selectedResolution);
-                                        if (credits > 0) {
-                                             return `Generate (${credits})`;
+                                        const requiredCredits = getRequiredCreditsSync(modelId, selectedResolution);
+                                        const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
+                                        
+                                        if (!hasSubscription) {
+                                             return "Get More Credits";
+                                        }
+                                        
+                                        if (!hasEnoughCredits) {
+                                             return "Get More Credits";
+                                        }
+                                        
+                                        if (requiredCredits > 0) {
+                                             return `Generate (${requiredCredits})`;
                                         }
                                         return "Generate";
                                    })()}

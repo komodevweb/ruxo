@@ -151,7 +151,7 @@ function page() {
           const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
           
           if (!hasSubscription) {
-               return { text: "Upgrade Plan", action: () => router.push("/upgrade") };
+               return { text: "Get More Credits", action: () => router.push("/upgrade") };
           }
           
           if (!hasEnoughCredits) {

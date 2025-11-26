@@ -433,7 +433,7 @@ function Page() {
           
           if (!hasSubscription) {
                // Redirect to /upgrade page where user can see all available plans
-               return { text: "Upgrade Plan", action: () => router.push("/upgrade") };
+               return { text: "Get More Credits", action: () => router.push("/upgrade") };
           }
           
           if (!hasEnoughCredits) {

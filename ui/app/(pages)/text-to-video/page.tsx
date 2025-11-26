@@ -285,7 +285,7 @@ function page() {
           const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
           
           if (!hasSubscription) {
-               return { text: "Upgrade Plan", action: handleUpgrade };
+               return { text: "Get More Credits", action: handleUpgrade };
           }
           
           if (!hasEnoughCredits) {
