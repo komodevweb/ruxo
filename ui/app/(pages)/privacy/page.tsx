@@ -25,7 +25,7 @@ function page() {
                     <div className="max-w-[900px] w-full px-5 mx-auto">
                          <div className="text-center mb-12">
                               <h1 className="md:text-[48px] text-[32px] text-white font-medium leading-[120%] tracking-[-1px] mb-4">Privacy Policy</h1>
-                              <p className="text-base text-white/60">Effective Date: November 20, 2025</p>
+                              <p className="text-base text-white/60">Effective Date: November 26, 2025</p>
                          </div>
 
                          <div className="space-y-8 text-white/80">
@@ -62,6 +62,25 @@ function page() {
                                    <h2 className="text-xl font-medium text-white mb-3">4. AI Processing & Data Retention</h2>
                                    <p className="leading-relaxed">
                                         Your uploads and prompts are processed by our AI models to generate content. We may temporarily store this data to fulfill your requests. We do not use your private content to train our public models without your explicit consent.
+                                   </p>
+                              </section>
+
+                              <section>
+                                   <h2 className="text-xl font-medium text-white mb-3">4.5. Content Safety & Moderation</h2>
+                                   <p className="leading-relaxed mb-3">
+                                        To ensure a safe environment for all users, we implement content moderation measures:
+                                   </p>
+                                   <ul className="list-disc pl-5 mt-2 space-y-2 leading-relaxed marker:text-white/60">
+                                        <li><strong>Automated Screening:</strong> All content (images, videos, text prompts) is automatically screened for prohibited material including pornography, nudity, violence, impersonation, and other harmful content.</li>
+                                        <li><strong>Manual Review:</strong> We reserve the right to manually review any content that triggers our automated systems or is reported by users.</li>
+                                        <li><strong>Content Removal:</strong> Prohibited content is immediately removed, and users who violate our safety policies may have their accounts suspended or terminated.</li>
+                                        <li><strong>Data Retention for Safety:</strong> We may retain content and metadata related to policy violations for safety, security, and legal compliance purposes, even after account termination.</li>
+                                        <li><strong>Reporting:</strong> We may report illegal content, including child exploitation material, to appropriate law enforcement authorities.</li>
+                                        <li><strong>No Impersonation:</strong> We actively prevent the creation of content that impersonates individuals without their consent, including deepfakes and unauthorized use of likeness.</li>
+                                        <li><strong>Consent Verification:</strong> We may require proof of consent when content appears to use someone else's image, video, or voice.</li>
+                                   </ul>
+                                   <p className="leading-relaxed mt-4">
+                                        Your privacy is important to us, but safety takes precedence. By using our Platform, you acknowledge that your content may be reviewed for compliance with our safety policies.
                                    </p>
                               </section>
 
