@@ -46,6 +46,7 @@ class ResetPasswordConfirmRequest(BaseModel):
 class AuthResponse(BaseModel):
     token: str
     user: UserMe
+    new_user: Optional[bool] = None  # True if this is a new user registration (for OAuth CompleteRegistration tracking)
 
 @router.post("/signup", response_model=AuthResponse)
 async def signup(
@@ -815,14 +816,21 @@ async def oauth_redirect(
             detail=f"Failed to initiate OAuth flow: {error_msg}"
         )
 
+class TrackingData(BaseModel):
+    """Optional tracking data sent from frontend to preserve cookies across OAuth redirects."""
+    fbp: Optional[str] = None
+    fbc: Optional[str] = None
+    user_agent: Optional[str] = None
+
 class OAuthExchangeRequest(BaseModel):
     code: str
     redirect_to: str  # The exact redirect_to URL that was used in the authorize request
+    tracking_data: Optional[TrackingData] = None  # Optional tracking data from frontend
 
 @router.post("/oauth/exchange", response_model=AuthResponse)
 async def oauth_exchange(
     request: OAuthExchangeRequest,
-    http_request: Request = None,
+    http_request: FastAPIRequest,
     session: AsyncSession = Depends(get_session)
 ):
     """
@@ -892,77 +900,67 @@ async def oauth_exchange(
             
             is_new_user = False
             if not user_profile:
-                is_new_user = True
-                logger.info(f"🆕 [OAUTH EXCHANGE] NEW USER detected: {email} (ID: {user_id})")
-                
-                # Create new user profile in our database
-                display_name = user_data.get("user_metadata", {}).get("full_name") or \
-                              user_data.get("user_metadata", {}).get("name") or \
-                              email or "User"
-                
-                # Get avatar URL from Supabase
-                avatar_url = user_data.get("avatar_url") or \
-                            user_data.get("user_metadata", {}).get("avatar_url") or \
-                            user_data.get("user_metadata", {}).get("picture") or \
-                            None
-                
-                user_profile = UserProfile(
-                    id=user_id,
-                    email=email or "",
-                    display_name=display_name,
-                    avatar_url=avatar_url
-                )
-                session.add(user_profile)
-                await session.commit()
-                await session.refresh(user_profile)
-                
-                # Create wallet for new user (fast operation)
-                wallet = await credits_service.get_or_create_wallet(user_id)
-                
-                # Track CompleteRegistration for OAuth signup (OAuth users are pre-verified)
-                try:
-                    from app.services.facebook_conversions import FacebookConversionsService
+                # User doesn't exist by ID - check if they exist by email (migration case)
+                if email:
+                    result_by_email = await session.execute(
+                        select(UserProfile).where(UserProfile.email == email)
+                    )
+                    existing_by_email = result_by_email.scalar_one_or_none()
                     
-                    conversions_service = FacebookConversionsService()
-                    
-                    # Extract first and last name from display_name
-                    first_name = None
-                    last_name = None
-                    if user_profile.display_name:
-                        name_parts = user_profile.display_name.split(maxsplit=1)
-                        first_name = name_parts[0] if name_parts else None
-                        last_name = name_parts[1] if len(name_parts) > 1 else None
-                    
-                    # Get client info from HTTP request
-                    client_ip = get_client_ip(http_request)
-                    client_user_agent = http_request.headers.get("user-agent") if http_request else None
-                    fbp = http_request.cookies.get("_fbp") if http_request else None
-                    fbc = http_request.cookies.get("_fbc") if http_request else None
-                    
-                    # Generate unique event_id for deduplication
-                    import asyncio
-                    import time
-                    event_id = f"registration_{user_profile.id}_{int(time.time())}"
-                    
-                    logger.info(f"🎯 [OAUTH EXCHANGE] Triggering CompleteRegistration for NEW OAuth user: {user_profile.email} (event_id: {event_id})")
-                    
-                    # Fire CompleteRegistration event (fire and forget)
-                    asyncio.create_task(conversions_service.track_complete_registration(
-                        email=user_profile.email,
-                        first_name=first_name,
-                        last_name=last_name,
-                        external_id=str(user_profile.id),
-                        client_ip=client_ip,
-                        client_user_agent=client_user_agent,
-                        fbp=fbp,
-                        fbc=fbc,
-                        event_source_url=f"{settings.FRONTEND_URL}/",
-                        event_id=event_id,
-                    ))
-                except Exception as e:
-                    logger.warning(f"❌ [OAUTH EXCHANGE] Failed to track CompleteRegistration for OAuth user: {str(e)}")
+                    if existing_by_email:
+                        # MIGRATION CASE: User exists by email but with different ID
+                        # This happens when user deleted Supabase account and re-registered with same email
+                        is_new_user = True  # Treat as new for CompleteRegistration purposes
+                        logger.info(f"🔄 [OAUTH EXCHANGE] MIGRATION detected: email={email}, old_id={existing_by_email.id}, new_id={user_id}")
+                        logger.info(f"ℹ️  [OAUTH EXCHANGE] Migration will be handled by get_current_user in complete-registration endpoint")
+                        
+                        # DON'T create new profile here - migration will be handled by security.py's get_current_user
+                        # when frontend calls complete-registration endpoint
+                        # Return existing profile for now, it will be migrated on next request
+                        user_profile = existing_by_email
+                        
+                        # Get wallet (it will be migrated to new ID later)
+                        wallet = await credits_service.get_or_create_wallet(existing_by_email.id)
+                    else:
+                        # NEW USER: Create new user profile
+                        is_new_user = True
+                        logger.info(f"🆕 [OAUTH EXCHANGE] NEW USER detected: {email} (ID: {user_id})")
+                        
+                        # Create new user profile in our database
+                        display_name = user_data.get("user_metadata", {}).get("full_name") or \
+                                      user_data.get("user_metadata", {}).get("name") or \
+                                      email or "User"
+                        
+                        # Get avatar URL from Supabase
+                        avatar_url = user_data.get("avatar_url") or \
+                                    user_data.get("user_metadata", {}).get("avatar_url") or \
+                                    user_data.get("user_metadata", {}).get("picture") or \
+                                    None
+                        
+                        user_profile = UserProfile(
+                            id=user_id,
+                            email=email or "",
+                            display_name=display_name,
+                            avatar_url=avatar_url
+                        )
+                        session.add(user_profile)
+                        await session.commit()
+                        await session.refresh(user_profile)
+                        
+                        # Create wallet for new user (fast operation)
+                        wallet = await credits_service.get_or_create_wallet(user_id)
+                        
+                        # DO NOT fire CompleteRegistration here - the request comes from Google's server, not the real browser
+                        # Instead, return new_user flag and let frontend call a separate endpoint from the real browser
+                        logger.info(f"🆕 [OAUTH EXCHANGE] New user created - CompleteRegistration will be fired when real browser hits backend")
+                else:
+                    # No email in token - shouldn't happen but handle gracefully
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid token: missing email"
+                    )
             else:
-                # Existing user - update email if it changed (only if needed)
+                # Existing user by ID - regular login, no CompleteRegistration needed
                 logger.info(f"👤 [OAUTH EXCHANGE] EXISTING USER login: {email} (ID: {user_id})")
                 logger.info(f"ℹ️  [OAUTH EXCHANGE] CompleteRegistration NOT fired - user already exists")
                 
@@ -1012,7 +1010,8 @@ async def oauth_exchange(
                     plan_interval = plan.interval
                     credits_per_month = plan.credits_per_month
             
-            # Return response immediately (fast path)
+            # Return response with new_user flag
+            # Frontend will call complete-registration endpoint if new_user is True
             return AuthResponse(
                 token=access_token,
                 user=UserMe(
@@ -1021,7 +1020,8 @@ async def oauth_exchange(
                     plan_name=plan_name,
                     plan_interval=plan_interval,
                     credits_per_month=credits_per_month
-                )
+                ),
+                new_user=is_new_user  # Frontend will use this to trigger CompleteRegistration from real browser
             )
         
     except HTTPException:
@@ -1035,6 +1035,146 @@ async def oauth_exchange(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"OAuth exchange failed: {str(e)}"
         )
+
+class CompleteRegistrationRequest(BaseModel):
+    """
+    Tracking data sent from frontend for CompleteRegistration event.
+    
+    IMPORTANT: _fbp and _fbc are first-party cookies set on the FRONTEND domain.
+    They won't be sent automatically via credentials:include because the backend
+    is on a different domain. Frontend must read them from document.cookie and
+    send them in the request body.
+    """
+    fbp: Optional[str] = None
+    fbc: Optional[str] = None
+    user_agent: Optional[str] = None
+
+@router.post("/oauth/complete-registration")
+async def oauth_complete_registration(
+    http_request: FastAPIRequest,
+    tracking_data: Optional[CompleteRegistrationRequest] = None,
+    current_user: UserProfile = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Fire CompleteRegistration event for OAuth signup.
+    Called by frontend AFTER OAuth (both code exchange and hash flows).
+    This request comes from the REAL browser, so we get real IP, user agent, cookies.
+    
+    Only fires the event if user is NEW (created within last 5 minutes) and hasn't
+    had tracking data set yet.
+    
+    IMPORTANT: Frontend must send fbp and fbc in the request body because they are
+    first-party cookies on the frontend domain and won't be sent automatically
+    to the backend API domain via credentials:include.
+    """
+    try:
+        from app.services.facebook_conversions import FacebookConversionsService
+        import asyncio
+        import time
+        
+        # Check if user is new and needs CompleteRegistration tracking
+        # Criteria: created within last 5 minutes AND signup_ip not set (hasn't been tracked yet)
+        is_new_user = False
+        if current_user.created_at:
+            # Use timezone-aware datetime for comparison
+            from datetime import timezone
+            now_utc = datetime.now(timezone.utc)
+            
+            # Make created_at timezone-aware if it's naive
+            created_at = current_user.created_at
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            
+            time_since_creation = now_utc - created_at
+            is_recently_created = time_since_creation.total_seconds() < 300  # 5 minutes
+            has_no_tracking = not (hasattr(current_user, 'signup_ip') and current_user.signup_ip)
+            is_new_user = is_recently_created and has_no_tracking
+            
+            logger.info(f"📊 [OAUTH COMPLETE-REGISTRATION] User check: created={current_user.created_at}, age={time_since_creation.total_seconds():.0f}s, has_tracking={not has_no_tracking}")
+        
+        if not is_new_user:
+            logger.info(f"ℹ️  [OAUTH COMPLETE-REGISTRATION] Skipping - user is not new: {current_user.email}")
+            return {"status": "skipped", "message": "User is not new", "event_fired": False}
+        
+        conversions_service = FacebookConversionsService()
+        
+        # Extract first and last name from display_name
+        first_name = None
+        last_name = None
+        if current_user.display_name:
+            name_parts = current_user.display_name.split(maxsplit=1)
+            first_name = name_parts[0] if name_parts else None
+            last_name = name_parts[1] if len(name_parts) > 1 else None
+        
+        # Get REAL client info from the actual browser request (not Google's server)
+        client_ip = get_client_ip(http_request)
+        
+        # Try to get user agent from request headers first, then from body
+        client_user_agent = http_request.headers.get("user-agent") if http_request else None
+        if tracking_data and tracking_data.user_agent:
+            # Prefer the user_agent from body if provided (more reliable)
+            client_user_agent = tracking_data.user_agent
+        
+        # IMPORTANT: _fbp and _fbc cookies are set on the FRONTEND domain
+        # They won't be sent via cookies to backend (different domain)
+        # Frontend must read them from document.cookie and send in request body
+        fbp = None
+        fbc = None
+        
+        # Try cookies first (in case same domain)
+        if http_request:
+            fbp = http_request.cookies.get("_fbp")
+            fbc = http_request.cookies.get("_fbc")
+        
+        # Use tracking_data from request body (preferred - works cross-domain)
+        if tracking_data:
+            if tracking_data.fbp:
+                fbp = tracking_data.fbp
+            if tracking_data.fbc:
+                fbc = tracking_data.fbc
+        
+        logger.info(f"🎯 [OAUTH COMPLETE-REGISTRATION] Firing CompleteRegistration for NEW OAuth user: {current_user.email}")
+        logger.info(f"📊 [OAUTH COMPLETE-REGISTRATION] Real browser data: IP={client_ip}, UA={bool(client_user_agent)}, fbp={bool(fbp)}, fbc={bool(fbc)}")
+        if fbp:
+            logger.info(f"📊 [OAUTH COMPLETE-REGISTRATION] fbp value: {fbp[:30]}..." if len(fbp) > 30 else f"📊 [OAUTH COMPLETE-REGISTRATION] fbp value: {fbp}")
+        if fbc:
+            logger.info(f"📊 [OAUTH COMPLETE-REGISTRATION] fbc value: {fbc[:30]}..." if len(fbc) > 30 else f"📊 [OAUTH COMPLETE-REGISTRATION] fbc value: {fbc}")
+        
+        # Save tracking data to user profile to prevent duplicate tracking
+        if hasattr(current_user, 'signup_ip'):
+            current_user.signup_ip = client_ip
+            current_user.signup_user_agent = client_user_agent
+            current_user.signup_fbp = fbp
+            current_user.signup_fbc = fbc
+            session.add(current_user)
+            await session.commit()
+        
+        # Generate unique event_id for deduplication
+        event_id = f"registration_{current_user.id}_{int(time.time())}"
+        
+        # Fire CompleteRegistration event (fire and forget)
+        asyncio.create_task(conversions_service.track_complete_registration(
+            email=current_user.email,
+            first_name=first_name,
+            last_name=last_name,
+            external_id=str(current_user.id),
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            fbp=fbp,
+            fbc=fbc,
+            event_source_url=f"{settings.FRONTEND_URL}/",
+            event_id=event_id,
+        ))
+        
+        logger.info(f"✅ [OAUTH COMPLETE-REGISTRATION] CompleteRegistration event queued for new user")
+        
+        return {"status": "success", "message": "CompleteRegistration event fired", "event_fired": True}
+        
+    except Exception as e:
+        logger.error(f"❌ [OAUTH COMPLETE-REGISTRATION] Failed to fire CompleteRegistration: {str(e)}", exc_info=True)
+        # Don't fail the request - tracking is best effort
+        return {"status": "error", "message": "Failed to fire CompleteRegistration event", "event_fired": False}
 
 @router.post("/oauth/callback")
 async def oauth_callback_post(

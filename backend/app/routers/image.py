@@ -333,9 +333,32 @@ async def calculate_credits(
 ):
     """
     Calculate credit cost for image generation.
+    Returns the actual amount that will be charged (rounded up).
+    Cached in Redis for 24 hours since credit costs don't change frequently.
     """
-    credits = calculate_credit_cost(model_id, resolution)
-    return {"credits": credits}
+    from app.utils.cache import get_cached, set_cached, cache_key
+    
+    # Generate cache key based on model and resolution
+    resolution_part = resolution or "default"
+    cache_key_str = cache_key("cache", "image", "credits", model_id, resolution_part)
+    
+    # Try to get from cache first
+    cached = await get_cached(cache_key_str)
+    if cached is not None:
+        return cached
+    
+    # Cache miss - calculate credit cost
+    estimated_credit_cost = calculate_credit_cost(model_id, resolution)
+    # Round up to nearest integer for actual credit deduction (matches submit endpoint logic)
+    # If already an integer, use it; otherwise round down and add 1
+    estimated_credit_cost_int = int(estimated_credit_cost) if estimated_credit_cost == int(estimated_credit_cost) else int(estimated_credit_cost) + 1
+    
+    result = {"credits": estimated_credit_cost_int}
+    
+    # Cache for 24 hours (credit costs are based on model config and rarely change)
+    await set_cached(cache_key_str, result, ttl=86400)
+    
+    return result
 
 
 @router.post("/submit", response_model=ImageGenerationResponse)

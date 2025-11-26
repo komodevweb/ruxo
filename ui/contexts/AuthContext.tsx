@@ -72,7 +72,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Process authentication in background (async, non-blocking)
       // This happens after URL is cleaned, so user sees clean URL immediately
       checkAuth().then(() => {
-        // User is now authenticated, redirect to homepage
+        // ALWAYS call complete-registration for OAuth users (hash flow)
+        // Backend will check if user is new and decide whether to fire the event
+        // This ensures we capture tracking data from the REAL browser
+        console.log('[OAUTH FRONTEND] Hash flow - calling complete-registration with tracking data...');
+        
+        // Read cookies from document.cookie (they won't be sent automatically cross-domain)
+        let fbpCookie: string | null = null;
+        let fbcCookie: string | null = null;
+        
+        try {
+          const cookies = document.cookie.split(';');
+          for (let cookie of cookies) {
+            cookie = cookie.trim();
+            if (cookie.startsWith('_fbp=')) {
+              fbpCookie = cookie.substring(5);
+            } else if (cookie.startsWith('_fbc=')) {
+              fbcCookie = cookie.substring(5);
+            }
+          }
+        } catch (e) {
+          console.warn('[OAUTH FRONTEND] Could not read cookies:', e);
+        }
+        
+        const userAgentValue = typeof navigator !== 'undefined' ? navigator.userAgent : null;
+        
+        // Fire complete-registration (backend will decide if event should be sent)
+        fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/auth/oauth/complete-registration`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${hashAccessToken}`,
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            fbp: fbpCookie,
+            fbc: fbcCookie,
+            user_agent: userAgentValue,
+          }),
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.event_fired) {
+            console.log('[OAUTH FRONTEND] ✅ CompleteRegistration event fired (new user)');
+          } else {
+            console.log('[OAUTH FRONTEND] ℹ️  CompleteRegistration not fired (existing user)');
+          }
+        })
+        .catch(error => {
+          console.error('[OAUTH FRONTEND] ❌ Error calling complete-registration:', error);
+        });
+        
+        // Redirect to homepage
         router.push('/');
       }).catch((error) => {
         console.error('[OAUTH FRONTEND] Auth verification failed:', error);
@@ -94,16 +145,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Backend sends: http://localhost:3000/ (with trailing slash)
           const redirectTo = (window.location.origin + window.location.pathname).replace(/\/$/, '') + '/';
           
+          // IMPORTANT: We're on the homepage after OAuth redirect
+          // The tracking data was captured on /signup or /login page BEFORE redirect
+          // Retrieve it from sessionStorage and send to backend
+          
+          // Retrieve stored tracking data (captured on signup/login page before OAuth redirect)
+          let fbp: string | null = null;
+          let fbc: string | null = null;
+          let userAgent: string | null = null;
+          
+          try {
+            // Get stored data from sessionStorage (captured before redirect)
+            const stored = sessionStorage.getItem('oauth_tracking_data');
+            if (stored) {
+              const storedData = JSON.parse(stored);
+              fbp = storedData.fbp || null;
+              fbc = storedData.fbc || null;
+              userAgent = storedData.userAgent || null;
+              
+              console.log('[OAUTH FRONTEND] ✅ Retrieved tracking data from sessionStorage:', {
+                hasFbp: !!fbp,
+                hasFbc: !!fbc,
+                hasUserAgent: !!userAgent,
+              });
+              
+              // Clean up after retrieval
+              sessionStorage.removeItem('oauth_tracking_data');
+            } else {
+              console.warn('[OAUTH FRONTEND] ⚠️  No stored tracking data found - trying current cookies');
+              
+              // Fallback: try to get current cookies (might be available now)
+              const cookies = document.cookie.split(';');
+              for (let cookie of cookies) {
+                cookie = cookie.trim();
+                if (cookie.startsWith('_fbp=')) {
+                  fbp = cookie.substring(5);
+                } else if (cookie.startsWith('_fbc=')) {
+                  fbc = cookie.substring(5);
+                }
+              }
+              userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null;
+            }
+          } catch (error) {
+            console.error('[OAUTH FRONTEND] ❌ Error retrieving tracking data:', error);
+            // Fallback to current cookies
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+              cookie = cookie.trim();
+              if (cookie.startsWith('_fbp=')) {
+                fbp = cookie.substring(5);
+              } else if (cookie.startsWith('_fbc=')) {
+                fbc = cookie.substring(5);
+              }
+            }
+            userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null;
+          }
+          
           console.log('[OAUTH FRONTEND] Redirect_to URL:', redirectTo);
+          console.log('[OAUTH FRONTEND] Final tracking data to send:', {
+            hasFbp: !!fbp,
+            hasFbc: !!fbc,
+            hasUserAgent: !!userAgent,
+          });
           console.log('[OAUTH FRONTEND] Calling backend exchange endpoint...');
+          
+          // Build request body - no need to send tracking_data here
+          // Backend will return new_user flag, then frontend will call complete-registration endpoint
+          // from the REAL browser to get real IP, user agent, and cookies
+          const requestBody = {
+            code: oauthCode,
+            redirect_to: redirectTo,
+          };
+          
+          console.log('[OAUTH FRONTEND] Request body:', {
+            hasCode: !!requestBody.code,
+            hasRedirectTo: !!requestBody.redirect_to,
+          });
           
           const response = await fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/auth/oauth/exchange`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              code: oauthCode,
-              redirect_to: redirectTo
-            }),
+            credentials: 'include',
+            body: JSON.stringify(requestBody),
           });
 
           console.log('[OAUTH FRONTEND] Backend response status:', response.status);
@@ -122,6 +245,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           const data = await response.json();
+          
+          console.log('[OAUTH FRONTEND] Backend response:', {
+            hasToken: !!data.token,
+            hasUser: !!data.user,
+            newUser: data.new_user,
+          });
+          
           if (data.token) {
             // IMMEDIATELY clean URL (user shouldn't see token/code in URL)
             const cleanUrl = window.location.pathname;
@@ -134,6 +264,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (data.user) {
               setUser(data.user);
               setLoading(false);
+              
+              // If this is a new user, fire CompleteRegistration from the REAL browser
+              // This ensures we get real IP, user agent, and cookies (not Google's server)
+              if (data.new_user === true) {
+                console.log('[OAUTH FRONTEND] 🆕 New user detected - firing CompleteRegistration from real browser...');
+                
+                // IMPORTANT: Read _fbp and _fbc cookies from document.cookie
+                // These are first-party cookies set on the FRONTEND domain (e.g., ruxo.ai)
+                // They WON'T be sent automatically via credentials:include because the
+                // backend API is on a different domain (e.g., api.ruxo.ai)
+                // We must read them here and send in the request body
+                let fbpCookie: string | null = null;
+                let fbcCookie: string | null = null;
+                
+                try {
+                  const cookies = document.cookie.split(';');
+                  for (let cookie of cookies) {
+                    cookie = cookie.trim();
+                    if (cookie.startsWith('_fbp=')) {
+                      fbpCookie = cookie.substring(5);
+                      console.log('[OAUTH FRONTEND] Found _fbp cookie:', fbpCookie.substring(0, 30) + '...');
+                    } else if (cookie.startsWith('_fbc=')) {
+                      fbcCookie = cookie.substring(5);
+                      console.log('[OAUTH FRONTEND] Found _fbc cookie:', fbcCookie.substring(0, 30) + '...');
+                    }
+                  }
+                } catch (e) {
+                  console.warn('[OAUTH FRONTEND] Could not read cookies:', e);
+                }
+                
+                // Get user agent
+                const userAgentValue = typeof navigator !== 'undefined' ? navigator.userAgent : null;
+                
+                console.log('[OAUTH FRONTEND] Tracking data to send:', {
+                  hasFbp: !!fbpCookie,
+                  hasFbc: !!fbcCookie,
+                  hasUserAgent: !!userAgentValue,
+                });
+                
+                // Call the complete-registration endpoint from the REAL browser
+                // Send fbp, fbc, and user_agent in the request body (not via cookies)
+                fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/auth/oauth/complete-registration`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${data.token}`, // Use the token we just received
+                  },
+                  credentials: 'include',
+                  body: JSON.stringify({
+                    fbp: fbpCookie,
+                    fbc: fbcCookie,
+                    user_agent: userAgentValue,
+                  }),
+                })
+                .then(response => {
+                  if (response.ok) {
+                    console.log('[OAUTH FRONTEND] ✅ CompleteRegistration event fired successfully with tracking data');
+                  } else {
+                    console.warn('[OAUTH FRONTEND] ⚠️  Failed to fire CompleteRegistration event');
+                  }
+                })
+                .catch(error => {
+                  console.error('[OAUTH FRONTEND] ❌ Error firing CompleteRegistration:', error);
+                });
+              }
+              
               // Redirect immediately after setting cookie and user
               router.push('/');
             } else {
@@ -345,6 +541,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithOAuth = async (provider: 'google' | 'apple' | 'microsoft') => {
+    // CRITICAL: Capture tracking data SYNCHRONOUSLY before any redirect
+    // This must happen on /signup or /login page where cookies are available
+    // BEFORE redirecting to OAuth provider
+    try {
+      // Import synchronously if possible, or use direct function calls
+      // We need to capture cookies NOW, on the signup/login page, before redirect
+      if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+        // Capture cookies directly (synchronous)
+        const cookies = document.cookie.split(';');
+        let fbp: string | null = null;
+        let fbc: string | null = null;
+        
+        for (let cookie of cookies) {
+          cookie = cookie.trim();
+          if (cookie.startsWith('_fbp=')) {
+            fbp = cookie.substring(5);
+          } else if (cookie.startsWith('_fbc=')) {
+            fbc = cookie.substring(5);
+          }
+        }
+        
+        // Capture user agent (synchronous)
+        const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null;
+        const referrer = typeof document !== 'undefined' ? document.referrer : null;
+        
+        // Store immediately in sessionStorage (synchronous)
+        const trackingData = {
+          fbp,
+          fbc,
+          userAgent,
+          referrer,
+        };
+        
+        sessionStorage.setItem('oauth_tracking_data', JSON.stringify(trackingData));
+        
+        console.log('[OAUTH] ✅ Captured tracking data on signup/login page:', {
+          hasFbp: !!fbp,
+          hasFbc: !!fbc,
+          hasUserAgent: !!userAgent,
+          page: window.location.pathname,
+        });
+      }
+    } catch (error) {
+      console.error('[OAUTH] ❌ Failed to capture tracking data:', error);
+    }
+    
     // Map 'microsoft' to 'azure' for Supabase (Supabase uses 'azure' as the provider name)
     const supabaseProvider = provider === 'microsoft' ? 'azure' : provider;
     // Redirect to backend OAuth endpoint

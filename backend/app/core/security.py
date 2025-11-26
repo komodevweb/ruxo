@@ -83,7 +83,7 @@ async def get_current_user(
                     # Strategy: Create new user profile, update foreign keys, then delete old profile
                     old_user_id = existing_user.id
                     logger.info(f"👤 [SECURITY] User RE-REGISTERED: email={email}, old_id={old_user_id}, new_id={user_id}")
-                    logger.info(f"ℹ️  [SECURITY] CompleteRegistration NOT fired - user already exists (migration)")
+                    logger.info(f"ℹ️  [SECURITY] Account migration detected - will fire CompleteRegistration after migration")
                     
                     try:
                         # Step 1: Create a new user profile with the new ID and a temporary email
@@ -161,6 +161,13 @@ async def get_current_user(
                         result = await session.execute(select(UserProfile).where(UserProfile.id == user_id))
                         user = result.scalar_one()
                         logger.info(f"Successfully migrated user {email} from {old_user_id} to {user_id}")
+                        
+                        # NOTE: CompleteRegistration event is NOT fired here because:
+                        # 1. This code runs during OAuth exchange (get_current_user)
+                        # 2. At this point, we don't have access to real browser data (IP, user agent, fbp, fbc)
+                        # 3. Frontend will call POST /auth/oauth/complete-registration AFTER OAuth exchange
+                        # 4. That endpoint will have access to real browser data for accurate tracking
+                        logger.info(f"🎯 [SECURITY] Migrated user detected: {user.email} - CompleteRegistration will be fired from frontend POST request")
                     except Exception as e:
                         await session.rollback()
                         logger.error(f"Failed to migrate user {email} from {old_user_id} to {user_id}: {str(e)}", exc_info=True)
@@ -182,50 +189,12 @@ async def get_current_user(
                     await session.commit()
                     await session.refresh(user)
                     
-                    # Track CompleteRegistration for new OAuth user
-                    try:
-                        from app.services.facebook_conversions import FacebookConversionsService
-                        
-                        conversions_service = FacebookConversionsService()
-                        
-                        # Extract first and last name from display_name
-                        first_name = None
-                        last_name = None
-                        if user.display_name:
-                            name_parts = user.display_name.split(maxsplit=1)
-                            first_name = name_parts[0] if name_parts else None
-                            last_name = name_parts[1] if len(name_parts) > 1 else None
-                        
-                        # Generate unique event_id for deduplication
-                        import asyncio
-                        import time
-                        event_id = f"registration_{user.id}_{int(time.time())}"
-                        
-                        logger.info(f"🎯 [SECURITY] Triggering CompleteRegistration for NEW OAuth user: {user.email} (event_id: {event_id})")
-                        
-                        # Get saved tracking context from user profile (captured during OAuth signup)
-                        client_ip = user.signup_ip if hasattr(user, 'signup_ip') else None
-                        client_user_agent = user.signup_user_agent if hasattr(user, 'signup_user_agent') else None
-                        fbp = user.signup_fbp if hasattr(user, 'signup_fbp') else None
-                        fbc = user.signup_fbc if hasattr(user, 'signup_fbc') else None
-                        
-                        logger.info(f"🎯 [SECURITY] Tracking Context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}..., fbp={fbp}, fbc={fbc}")
-                        
-                        # Fire CompleteRegistration event (fire and forget)
-                        asyncio.create_task(conversions_service.track_complete_registration(
-                            email=user.email,
-                            first_name=first_name,
-                            last_name=last_name,
-                            external_id=str(user.id),
-                            client_ip=client_ip,
-                            client_user_agent=client_user_agent,
-                            fbp=fbp,
-                            fbc=fbc,
-                            event_source_url=f"{settings.FRONTEND_URL}/",
-                            event_id=event_id,
-                        ))
-                    except Exception as e:
-                        logger.warning(f"❌ [SECURITY] Failed to track CompleteRegistration for OAuth user: {str(e)}")
+                    # NOTE: CompleteRegistration event is NOT fired here because:
+                    # 1. This code runs during OAuth exchange (get_current_user)
+                    # 2. At this point, we don't have access to real browser data (IP, user agent, fbp, fbc)
+                    # 3. Frontend will call POST /auth/oauth/complete-registration AFTER OAuth exchange
+                    # 4. That endpoint will have access to real browser data for accurate tracking
+                    logger.info(f"🎯 [SECURITY] New OAuth user created: {user.email} - CompleteRegistration will be fired from frontend POST request")
             else:
                 raise HTTPException(status_code=401, detail="Invalid token payload: missing email")
 

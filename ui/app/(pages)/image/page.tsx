@@ -25,6 +25,7 @@ export default function ImagePage() {
      const [models, setModels] = useState<any[]>([]); // Filtered models based on mode
      const [loadingModels, setLoadingModels] = useState(true);
      const [creditCache, setCreditCache] = useState<Map<string, number>>(new Map());
+     const [displayCredits, setDisplayCredits] = useState<number>(0); // Current displayed credits to prevent blinking
      const [imageFile, setImageFile] = useState<File | null>(null);
      const [imagePreview, setImagePreview] = useState<string | null>(null);
      const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -36,6 +37,35 @@ export default function ImagePage() {
      const [loadingCreations, setLoadingCreations] = useState(false);
      const [hasLoadedCreationsOnce, setHasLoadedCreationsOnce] = useState(false);
      const [selectedImageOverlay, setSelectedImageOverlay] = useState<string | null>(null);
+
+     // Format resolution for display (e.g., "1024*1024" -> "1K" or "1024×1024")
+     const formatResolution = (resolution: string): string => {
+          if (!resolution) return resolution;
+          
+          // If it's already in a short format like "1k", "2k", "4k", return as is
+          if (/^\d+[kK]$/.test(resolution)) {
+               return resolution.toUpperCase();
+          }
+          
+          // If it's in format like "1024*1024", convert to smarter format
+          if (resolution.includes('*')) {
+               const [width, height] = resolution.split('*').map(Number);
+               if (width && height) {
+                    // If square resolution, show as "1K", "2K", "4K" etc.
+                    if (width === height) {
+                         if (width >= 4096) return "4K";
+                         if (width >= 2048) return "2K";
+                         if (width >= 1024) return "1K";
+                         if (width >= 512) return "512";
+                    }
+                    // For non-square, show as "1024×1024" (using × instead of *)
+                    return `${width}×${height}`;
+               }
+          }
+          
+          // Return as is if we can't parse it
+          return resolution;
+     };
 
      // Get available aspect ratios based on selected model
      const getAvailableAspectRatios = () => {
@@ -51,7 +81,8 @@ export default function ImagePage() {
           if (!selectedModel) return [];
           return (selectedModel.supported_resolutions || []).map((res: string) => ({
                id: res,
-               name: res
+               name: res,
+               displayName: formatResolution(res)
           }));
      };
 
@@ -154,6 +185,7 @@ export default function ImagePage() {
                
                if (response.ok) {
                     const data = await response.json();
+                    // Backend now returns the exact amount that will be charged (already rounded)
                     const credits = data.credits || 0;
                     // Cache the result
                     setCreditCache(prev => new Map(prev).set(cacheKey, credits));
@@ -381,19 +413,45 @@ export default function ImagePage() {
           }
      }, [selectedModel]);
 
-     // Pre-fetch credit costs when model or resolution changes
+     // Pre-fetch credit costs when model or resolution changes and update display
      useEffect(() => {
           if (selectedModel && selectedResolution) {
                const modelId = selectedModel.id;
                const cacheKey = `${modelId}-${selectedResolution}`;
                
-               // Only fetch if not already cached
-               if (!creditCache.has(cacheKey)) {
-                    getRequiredCredits(modelId, selectedResolution).catch(console.error);
+               // Check cache first and update display immediately
+               const cachedValue = creditCache.get(cacheKey);
+               if (cachedValue !== undefined && cachedValue > 0) {
+                    // Use cached value immediately to prevent blinking
+                    setDisplayCredits(cachedValue);
+               } else {
+                    // Only fetch if not cached
+                    if (!creditCache.has(cacheKey)) {
+                         // Fetch from backend (will update cache and trigger re-render)
+                         getRequiredCredits(modelId, selectedResolution)
+                              .then(credits => {
+                                   // Cache update will trigger the effect below to update display
+                              })
+                              .catch(console.error);
+                    }
                }
+          } else {
+               setDisplayCredits(0);
           }
           // eslint-disable-next-line react-hooks/exhaustive-deps
-     }, [selectedModel, selectedResolution]);
+     }, [selectedModel?.id, selectedResolution]);
+     
+     // Update displayCredits when cache updates for current model/resolution
+     useEffect(() => {
+          if (selectedModel && selectedResolution) {
+               const modelId = selectedModel.id;
+               const cacheKey = `${modelId}-${selectedResolution}`;
+               const cachedValue = creditCache.get(cacheKey);
+               if (cachedValue !== undefined) {
+                    setDisplayCredits(cachedValue);
+               }
+          }
+     }, [creditCache, selectedModel?.id, selectedResolution]);
 
      // Load user's creations
      const loadMyCreations = async () => {
@@ -718,17 +776,17 @@ export default function ImagePage() {
                                              <div className="relative">
                                                   <ListboxButton className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg py-1.5 px-2.5 text-[11px] font-medium text-white transition-colors">
                                                        <span className="text-[11px]">Res</span>
-                                                       {selectedResolution}
+                                                       {formatResolution(selectedResolution)}
                                                        <img src="/images/droparrow.svg" className="w-2.5 h-2.5 opacity-50 ml-auto" alt="" />
                                                   </ListboxButton>
-                                                  <ListboxOptions className="absolute bottom-full left-0 mb-2 w-20 bg-[#25282F] border border-white/10 rounded-xl p-1 focus:outline-none z-50">
+                                                  <ListboxOptions className="absolute bottom-full left-0 mb-2 w-24 bg-[#25282F] border border-white/10 rounded-xl p-1 focus:outline-none z-50">
                                                        {getAvailableResolutions().map((res: any) => (
                                                             <ListboxOption
                                                                  key={res.id}
                                                                  value={res.name}
                                                                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-white rounded-lg cursor-pointer hover:bg-white/10 data-[selected]:bg-white/10"
                                                             >
-                                                                 {res.name}
+                                                                 {res.displayName || res.name}
                                                             </ListboxOption>
                                                        ))}
                                                   </ListboxOptions>
@@ -780,7 +838,10 @@ export default function ImagePage() {
                                         // Check subscription and credits
                                         const hasSubscription = !!user.plan_name;
                                         const modelId = selectedModel?.id;
-                                        const requiredCredits = modelId ? getRequiredCreditsSync(modelId, selectedResolution) : 0;
+                                        // Use displayCredits to prevent blinking (falls back to sync if not set)
+                                        const requiredCredits = modelId && displayCredits > 0 
+                                             ? displayCredits 
+                                             : (modelId ? getRequiredCreditsSync(modelId, selectedResolution) : 0);
                                         const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
                                         
                                         if (!hasSubscription || !hasEnoughCredits) {
@@ -959,7 +1020,10 @@ export default function ImagePage() {
                                         if (user) {
                                              const hasSubscription = !!user.plan_name;
                                              const modelId = selectedModel?.id;
-                                             const requiredCredits = modelId ? getRequiredCreditsSync(modelId, selectedResolution) : 0;
+                                             // Use displayCredits to prevent blinking
+                                             const requiredCredits = modelId && displayCredits > 0 
+                                                  ? displayCredits 
+                                                  : (modelId ? getRequiredCreditsSync(modelId, selectedResolution) : 0);
                                              const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
                                              
                                              // If no subscription or not enough credits, button should be clickable to go to upgrade
@@ -978,7 +1042,10 @@ export default function ImagePage() {
                                              if (user) {
                                                   const hasSubscription = !!user.plan_name;
                                                   const modelId = selectedModel?.id;
-                                                  const requiredCredits = modelId ? getRequiredCreditsSync(modelId, selectedResolution) : 0;
+                                                  // Use displayCredits to prevent blinking
+                                                  const requiredCredits = modelId && displayCredits > 0 
+                                                       ? displayCredits 
+                                                       : (modelId ? getRequiredCreditsSync(modelId, selectedResolution) : 0);
                                                   const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
                                                   
                                                   if (!hasSubscription || !hasEnoughCredits) {
@@ -999,7 +1066,8 @@ export default function ImagePage() {
                                         
                                         const hasSubscription = !!user.plan_name;
                                         const modelId = selectedModel.id;
-                                        const requiredCredits = getRequiredCreditsSync(modelId, selectedResolution);
+                                        // Use displayCredits state to prevent blinking (updated when cache changes)
+                                        const requiredCredits = displayCredits > 0 ? displayCredits : getRequiredCreditsSync(modelId, selectedResolution);
                                         const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
                                         
                                         if (!hasSubscription) {
@@ -1010,6 +1078,7 @@ export default function ImagePage() {
                                              return "Get More Credits";
                                         }
                                         
+                                        // Backend returns the exact amount that will be charged
                                         if (requiredCredits > 0) {
                                              return `Generate (${requiredCredits})`;
                                         }
