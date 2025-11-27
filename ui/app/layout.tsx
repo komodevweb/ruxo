@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
 import Header from "./components/Header";
+import Timer from "./components/Timer";
 import { AuthProvider } from "@/contexts/AuthContext";
 
 export const viewport: Viewport = {
@@ -115,6 +116,7 @@ export default function RootLayout({
         {/* End TikTok Pixel Code */}
         
         <AuthProvider>
+          <Timer />
           <Header></Header>
           {children}
         </AuthProvider>

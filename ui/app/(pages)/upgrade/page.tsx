@@ -237,58 +237,50 @@ function page() {
                     credits: 200,
                     features: [
                          '200 Credits per month',
-                         'Generate up to 200 images',
-                         'Generate up to 20 videos',
+                         '~200 images or ~20 videos',
                          '5 concurrent generations',
-                         'Image & Video upscaling',
-                         'Video Models: Wan 2.2',
-                         'Standard Image Quality',
+                         'Wan 2.5 Video & Image',
+                         'Minimax Hailuo Video',
+                         'Flux 1.1 Pro Ultra',
+                         'Stable Diffusion 3.5',
                     ]
                },
                'pro': {
                     credits: 400,
                     features: [
                          '400 Credits per month',
-                         'Generate up to 400 images',
-                         'Generate up to 40 videos',
+                         '~400 images or ~50 videos',
                          '10 concurrent generations',
-                         'Image & Video upscaling',
-                         'Video Models: Wan 2.2',
-                         'Standard Image Quality',
+                         'Everything in Starter +',
+                         'OpenAI Sora 2 🔥',
+                         'Google Veo 3 & 3.1 🔥',
+                         'Kling v2.5 Turbo Pro',
+                         'Seedance v1 Pro',
                          'Up to 4 Images at Once',
-                         'Google Veo3',
                     ]
                },
                'creator': {
                     credits: 1000,
                     features: [
                          '1,000 Credits per month',
-                         'Generate up to 1,000 images',
-                         'Generate up to 100 videos',
+                         '~1,000 images or ~125 videos',
                          '20 concurrent generations',
-                         'Image & Video upscaling',
-                         'Video Models: Wan 2.2',
-                         'Premium Image Quality',
+                         'Everything in Pro +',
+                         'OpenAI Sora 2 Pro 🔥',
+                         'All 15+ AI Models',
                          'Up to 8 Images at Once',
-                         'Google Veo3',
                          'Creative Characters',
-                         'Ruxo generation',
                     ]
                },
                'ultimate': {
                     credits: 2000,
                     features: [
                          '2,000 Credits per month',
-                         'Generate up to 2,000 images',
-                         'Generate up to 200 videos',
-                         'Unlimited concurrent generations',
-                         'Image & Video upscaling',
-                         'Video Models: Wan 2.2',
-                         'Premium Image Quality',
+                         '~2,000 images or ~250 videos',
+                         'Unlimited concurrent',
+                         'Everything in Creator +',
+                         'All 15+ AI Models',
                          'Unlimited Images at Once',
-                         'Google Veo3',
-                         'Creative Characters',
-                         'Ruxo generation',
                          'UGC Generator',
                          'Priority Support',
                     ]
@@ -478,8 +470,25 @@ function page() {
                <section id="upgrade" className="w-full font-inter bg-black-1100 md:pt-[160px] pt-[110px]  py-20">
                     <div className="w-full max-w-[1400px] px-5 mx-auto">
                          <div className="text-center mb-12">
-                              <h2 className="md:text-[48px] text-[32px] mb-3 text-white font-medium leading-[120%] tracking-[-1px]">Choose Your Plan</h2>
-                              <p className="text-base font-normal leading-5 text-white/60 tracking-[-0.32px]">Unlock more generations and early access to upcoming features</p>
+                              <h2 className="md:text-[48px] text-[32px] mb-3 text-white font-medium leading-[120%] tracking-[-1px]">All the best AI models in one place</h2>
+                              <p className="text-base font-normal leading-5 text-white/60 tracking-[-0.32px] max-w-2xl mx-auto mb-6">
+                                   Access Sora, Veo, Kling, Flux and 15+ premium AI models with a single subscription.
+                              </p>
+                              <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 max-w-4xl mx-auto mb-4">
+                                   <span className="px-3 py-1.5 rounded-full bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/40 text-xs md:text-sm text-white font-medium">🔥 Sora 2 Pro</span>
+                                   <span className="px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/40 text-xs md:text-sm text-white font-medium">🔥 Google Veo 3.1</span>
+                                   <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Kling v2.5 Pro</span>
+                                   <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Minimax Hailuo</span>
+                                   <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Seedance Pro</span>
+                              </div>
+                              <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 max-w-4xl mx-auto">
+                                   <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Flux 1.1 Pro Ultra</span>
+                                   <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Stable Diffusion 3.5</span>
+                                   <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Wan 2.5</span>
+                                   <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Nano Banana Pro</span>
+                                   <span className="px-3 py-1.5 rounded-full bg-blue2/20 border border-blue2/40 text-xs md:text-sm text-blue2 font-medium">+ New Models Weekly</span>
+                              </div>
+                              
                               {error && (
                                    <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
                                         <p className="text-red-400 text-sm">{error}</p>
@@ -508,7 +517,7 @@ function page() {
                                                   {Monthly === "yearly" && <div className="w-2.5 h-2.5 rounded-full bg-blue2 border border-blue1"></div>}
                                              </div>
                                              <span className="text-white font-medium text-sm font-inter">Annually</span>
-                                             <span className={`${Monthly === "yearly" ? 'text-white/60' : 'text-white/40'}  font-medium text-sm`}>Save 40%</span>
+                                             <span className={`${Monthly === "yearly" ? 'text-white/60' : 'text-white/40'}  font-medium text-sm`}>Save 60%</span>
                                         </button>
                                    </div>
                               </div>
@@ -597,6 +606,84 @@ function page() {
                                    })}
                               </div>
                          )}
+                         
+                         {/* Reviews Section */}
+                         <div className="w-full max-w-6xl mx-auto mt-20 pb-10 border-t border-white/5 pt-16">
+                              <div className="flex flex-col items-center mb-12">
+                                   <div className="flex items-center gap-2 mb-3 bg-white/5 px-4 py-2 rounded-full border border-white/10">
+                                        <div className="flex">
+                                             {[...Array(5)].map((_, i) => (
+                                                  <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                                  </svg>
+                                             ))}
+                                        </div>
+                                        <span className="text-white font-semibold text-sm">4.9/5</span>
+                                        <span className="text-white/40 text-sm border-l border-white/20 pl-2">Trusted by 2,400+ creators</span>
+                                   </div>
+                                   <h3 className="text-2xl md:text-3xl font-medium text-white text-center mb-2">Loved by creators</h3>
+                                   <p className="text-white/50 text-center max-w-lg">See why thousands of creators switched to Ruxo for their AI video generation.</p>
+                              </div>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 px-4">
+                                   {/* Review 1 */}
+                                   <div className="bg-gradient-to-b from-white/[0.07] to-white/[0.02] border border-white/10 rounded-2xl p-6 backdrop-blur-sm hover:border-white/20 transition-all duration-300">
+                                        <div className="flex items-center gap-1 mb-4">
+                                             {[...Array(5)].map((_, i) => (
+                                                  <svg key={i} className="w-4 h-4 text-yellow-400/80" fill="currentColor" viewBox="0 0 20 20">
+                                                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                                  </svg>
+                                             ))}
+                                        </div>
+                                        <p className="text-white/80 text-sm leading-relaxed mb-6 min-h-[60px]">"Finally one place for all AI video tools. Saved me hundreds on subscriptions. The workflow is seamless."</p>
+                                        <div className="flex items-center gap-3 pt-4 border-t border-white/5">
+                                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center text-white font-bold text-sm shadow-inner">MT</div>
+                                             <div>
+                                                  <p className="text-white font-medium text-sm">Marcus T.</p>
+                                                  <p className="text-white/40 text-xs">Content Creator</p>
+                                             </div>
+                                        </div>
+                                   </div>
+
+                                   {/* Review 2 */}
+                                   <div className="bg-gradient-to-b from-white/[0.07] to-white/[0.02] border border-white/10 rounded-2xl p-6 backdrop-blur-sm hover:border-white/20 transition-all duration-300">
+                                        <div className="flex items-center gap-1 mb-4">
+                                             {[...Array(5)].map((_, i) => (
+                                                  <svg key={i} className="w-4 h-4 text-yellow-400/80" fill="currentColor" viewBox="0 0 20 20">
+                                                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                                  </svg>
+                                             ))}
+                                        </div>
+                                        <p className="text-white/80 text-sm leading-relaxed mb-6 min-h-[60px]">"The Veo and Sora quality is incredible. It's been the best investment for my agency's production pipeline."</p>
+                                        <div className="flex items-center gap-3 pt-4 border-t border-white/5">
+                                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 border border-white/10 flex items-center justify-center text-white font-bold text-sm shadow-inner">SK</div>
+                                             <div>
+                                                  <p className="text-white font-medium text-sm">Sarah K.</p>
+                                                  <p className="text-white/40 text-xs">Marketing Agency</p>
+                                             </div>
+                                        </div>
+                                   </div>
+
+                                   {/* Review 3 */}
+                                   <div className="bg-gradient-to-b from-white/[0.07] to-white/[0.02] border border-white/10 rounded-2xl p-6 backdrop-blur-sm hover:border-white/20 transition-all duration-300">
+                                        <div className="flex items-center gap-1 mb-4">
+                                             {[...Array(5)].map((_, i) => (
+                                                  <svg key={i} className="w-4 h-4 text-yellow-400/80" fill="currentColor" viewBox="0 0 20 20">
+                                                       <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                                  </svg>
+                                             ))}
+                                        </div>
+                                        <p className="text-white/80 text-sm leading-relaxed mb-6 min-h-[60px]">"New models added weekly - I don't have to worry about missing out on the latest AI tech anymore."</p>
+                                        <div className="flex items-center gap-3 pt-4 border-t border-white/5">
+                                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500/20 to-pink-500/20 border border-white/10 flex items-center justify-center text-white font-bold text-sm shadow-inner">JR</div>
+                                             <div>
+                                                  <p className="text-white font-medium text-sm">James R.</p>
+                                                  <p className="text-white/40 text-xs">Indie Filmmaker</p>
+                                             </div>
+                                        </div>
+                                   </div>
+                              </div>
+                         </div>
                     </div>
                </section>
           </>

@@ -23,7 +23,7 @@ function Header() {
   }
 
   return (
-    <header className="bg-black-1100/80 backdrop-blur-md fixed left-0 w-full top-0 z-[1000] p-4 font-inter flex items-center justify-between">
+    <header className="bg-black-1100/80 backdrop-blur-md fixed left-0 w-full top-[24px] md:top-[32px] z-[1000] p-4 font-inter flex items-center justify-between">
       <Link href="/">
         <img src="/images/logo.svg" className="h-[28.8px] md:h-[38.4px] md:w-auto w-auto" alt="Ruxo" />
       </Link>
