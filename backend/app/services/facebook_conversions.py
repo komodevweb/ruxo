@@ -374,8 +374,19 @@ class FacebookConversionsService:
         fbp: Optional[str] = None,
         fbc: Optional[str] = None,
         event_source_url: Optional[str] = None,
+        # Optional value parameters for when user selects a specific plan
+        value: Optional[float] = None,
+        currency: Optional[str] = "USD",
+        content_ids: Optional[List[str]] = None,
+        content_name: Optional[str] = None,
+        content_type: Optional[str] = None,
+        num_items: Optional[int] = None,
     ) -> bool:
-        """Track InitiateCheckout event."""
+        """Track InitiateCheckout event.
+        
+        Optionally includes value/currency when user selects a specific plan.
+        This helps Facebook optimize for high-value checkouts.
+        """
         user_data = self._get_user_data(
             email=email,
             external_id=external_id,
@@ -389,10 +400,23 @@ class FacebookConversionsService:
             event_source_url=event_source_url,
         )
         
+        # Build custom_data if value is provided
+        custom_data = None
+        if value is not None:
+            custom_data = self._get_custom_data(
+                currency=currency,
+                value=value,
+                content_ids=content_ids,
+                content_name=content_name,
+                content_type=content_type,
+                num_items=num_items,
+            )
+        
         return await self.send_event(
             event_name="InitiateCheckout",
             user_data=user_data,
             event_data=event_data,
+            custom_data=custom_data,
         )
     
     async def track_purchase(

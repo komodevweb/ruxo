@@ -94,6 +94,10 @@ class Settings(BaseSettings):
     # Facebook Conversions API
     FACEBOOK_PIXEL_ID: Optional[str] = None  # Facebook Pixel ID (e.g., "860080813089481")
     FACEBOOK_ACCESS_TOKEN: Optional[str] = None  # Facebook Conversions API Access Token
+    
+    # TikTok Conversions API
+    TIKTOK_PIXEL_ID: Optional[str] = None  # TikTok Pixel ID (e.g., "D4JVLBBC77U4IAHDMKB0")
+    TIKTOK_ACCESS_TOKEN: Optional[str] = None  # TikTok Events API Access Token
 
     model_config = SettingsConfigDict(case_sensitive=True, env_file=".env", extra="ignore")
 

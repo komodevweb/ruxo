@@ -30,6 +30,11 @@ class SignUpRequest(BaseModel):
     email: EmailStr
     password: str
     display_name: str
+    # Tracking cookies (sent from frontend since cross-domain cookies don't work)
+    fbp: Optional[str] = None
+    fbc: Optional[str] = None
+    ttp: Optional[str] = None
+    ttclid: Optional[str] = None
 
 class SignInRequest(BaseModel):
     email: EmailStr
@@ -96,8 +101,11 @@ async def signup(
             # Get tracking context for later use (email verification webhook)
             client_ip = get_client_ip(http_request)
             client_user_agent = http_request.headers.get("user-agent") if http_request else None
-            fbp = http_request.cookies.get("_fbp") if http_request else None
-            fbc = http_request.cookies.get("_fbc") if http_request else None
+            # Get tracking cookies from request body (cross-domain cookies don't work)
+            fbp = signup_request.fbp
+            fbc = signup_request.fbc
+            ttp = signup_request.ttp
+            ttclid = signup_request.ttclid
             
             if not user_profile:
                 user_profile = UserProfile(
@@ -125,8 +133,10 @@ async def signup(
             # Track CompleteRegistration event for users requiring email verification
             try:
                 from app.services.facebook_conversions import FacebookConversionsService
+                from app.services.tiktok_conversions import TikTokConversionsService
                 
                 conversions_service = FacebookConversionsService()
+                tiktok_service = TikTokConversionsService()
                 
                 # Extract first and last name from display_name if available
                 first_name = None
@@ -144,6 +154,8 @@ async def signup(
                 # Generate unique event_id for deduplication
                 event_id = f"registration_{user_profile.id}_{int(time.time())}"
                 logger.info(f"🎯 Triggering CompleteRegistration for user: {user_profile.email} (event_id: {event_id})")
+                
+                # Facebook tracking
                 asyncio.create_task(conversions_service.track_complete_registration(
                     email=user_profile.email,
                     first_name=first_name,
@@ -155,6 +167,20 @@ async def signup(
                     fbc=fbc,
                     event_source_url=f"{settings.FRONTEND_URL}/signup-password",
                     event_id=event_id,
+                ))
+                
+                # TikTok tracking (ttp, ttclid already extracted from request body above)
+                asyncio.create_task(tiktok_service.track_complete_registration(
+                    email=user_profile.email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    external_id=str(user_profile.id),
+                    client_ip=client_ip,
+                    client_user_agent=client_user_agent,
+                    event_source_url=f"{settings.FRONTEND_URL}/signup-password",
+                    event_id=event_id,
+                    ttp=ttp,
+                    ttclid=ttclid,
                 ))
             except Exception as e:
                 logger.warning(f"Failed to track CompleteRegistration event for user: {str(e)}")
@@ -239,8 +265,10 @@ async def signup(
         # Track CompleteRegistration event for Facebook Conversions API
         try:
             from app.services.facebook_conversions import FacebookConversionsService
+            from app.services.tiktok_conversions import TikTokConversionsService
             
             conversions_service = FacebookConversionsService()
+            tiktok_service = TikTokConversionsService()
             
             # Extract first and last name from display_name if available
             first_name = None
@@ -264,6 +292,8 @@ async def signup(
             # Generate unique event_id for deduplication (if user also has Meta Pixel)
             event_id = f"registration_{user_profile.id}_{int(time.time())}"
             logger.info(f"🎯 Triggering CompleteRegistration for verified user: {user_profile.email} (event_id: {event_id})")
+            
+            # Facebook tracking
             asyncio.create_task(conversions_service.track_complete_registration(
                 email=user_profile.email,
                 first_name=first_name,
@@ -275,6 +305,22 @@ async def signup(
                 fbc=fbc,
                 event_source_url=f"{settings.FRONTEND_URL}/signup-password",
                 event_id=event_id,
+            ))
+            
+            # TikTok tracking
+            ttp = http_request.cookies.get("_ttp") if http_request else None
+            ttclid = http_request.cookies.get("_ttclid") if http_request else None
+            asyncio.create_task(tiktok_service.track_complete_registration(
+                email=user_profile.email,
+                first_name=first_name,
+                last_name=last_name,
+                external_id=str(user_profile.id),
+                client_ip=client_ip,
+                client_user_agent=client_user_agent,
+                event_source_url=f"{settings.FRONTEND_URL}/signup-password",
+                event_id=event_id,
+                ttp=ttp,
+                ttclid=ttclid,
             ))
         except Exception as e:
             logger.warning(f"Failed to track CompleteRegistration event: {str(e)}")
@@ -820,6 +866,8 @@ class TrackingData(BaseModel):
     """Optional tracking data sent from frontend to preserve cookies across OAuth redirects."""
     fbp: Optional[str] = None
     fbc: Optional[str] = None
+    ttp: Optional[str] = None
+    ttclid: Optional[str] = None
     user_agent: Optional[str] = None
 
 class OAuthExchangeRequest(BaseModel):
@@ -1040,13 +1088,18 @@ class CompleteRegistrationRequest(BaseModel):
     """
     Tracking data sent from frontend for CompleteRegistration event.
     
-    IMPORTANT: _fbp and _fbc are first-party cookies set on the FRONTEND domain.
+    IMPORTANT: _fbp, _fbc, _ttp, and _ttclid are first-party cookies set on the FRONTEND domain.
     They won't be sent automatically via credentials:include because the backend
     is on a different domain. Frontend must read them from document.cookie and
     send them in the request body.
     """
+    # Facebook cookies
     fbp: Optional[str] = None
     fbc: Optional[str] = None
+    # TikTok cookies
+    ttp: Optional[str] = None
+    ttclid: Optional[str] = None
+    # Browser info
     user_agent: Optional[str] = None
 
 @router.post("/oauth/complete-registration")
@@ -1070,6 +1123,7 @@ async def oauth_complete_registration(
     """
     try:
         from app.services.facebook_conversions import FacebookConversionsService
+        from app.services.tiktok_conversions import TikTokConversionsService
         import asyncio
         import time
         
@@ -1098,6 +1152,7 @@ async def oauth_complete_registration(
             return {"status": "skipped", "message": "User is not new", "event_fired": False}
         
         conversions_service = FacebookConversionsService()
+        tiktok_service = TikTokConversionsService()
         
         # Extract first and last name from display_name
         first_name = None
@@ -1154,6 +1209,7 @@ async def oauth_complete_registration(
         event_id = f"registration_{current_user.id}_{int(time.time())}"
         
         # Fire CompleteRegistration event (fire and forget)
+        # Facebook tracking
         asyncio.create_task(conversions_service.track_complete_registration(
             email=current_user.email,
             first_name=first_name,
@@ -1165,6 +1221,30 @@ async def oauth_complete_registration(
             fbc=fbc,
             event_source_url=f"{settings.FRONTEND_URL}/",
             event_id=event_id,
+        ))
+        
+        # TikTok tracking
+        ttp = None
+        ttclid = None
+        if http_request:
+            ttp = http_request.cookies.get("_ttp")
+            ttclid = http_request.cookies.get("_ttclid")
+        if tracking_data:
+            if hasattr(tracking_data, 'ttp') and tracking_data.ttp:
+                ttp = tracking_data.ttp
+            if hasattr(tracking_data, 'ttclid') and tracking_data.ttclid:
+                ttclid = tracking_data.ttclid
+        asyncio.create_task(tiktok_service.track_complete_registration(
+            email=current_user.email,
+            first_name=first_name,
+            last_name=last_name,
+            external_id=str(current_user.id),
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            event_source_url=f"{settings.FRONTEND_URL}/",
+            event_id=event_id,
+            ttp=ttp,
+            ttclid=ttclid,
         ))
         
         logger.info(f"✅ [OAUTH COMPLETE-REGISTRATION] CompleteRegistration event queued for new user")

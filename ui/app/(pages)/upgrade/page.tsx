@@ -136,10 +136,23 @@ function page() {
           }
 
           // Track InitiateCheckout event ONLY when user explicitly clicks to select a plan
-          console.log('✅ User clicked Select Plan - tracking InitiateCheckout for plan:', planName);
+          // Find the selected plan to get its value for tracking
+          const selectedPlan = plans.find(p => p.name === planName);
+          console.log('✅ User clicked Select Plan - tracking InitiateCheckout for plan:', planName, {
+               value: selectedPlan?.amount_dollars,
+               currency: selectedPlan?.currency,
+               displayName: selectedPlan?.display_name
+          });
           try {
-               await trackInitiateCheckout(`button-click:${planName}`);
-               console.log('✅ InitiateCheckout tracked successfully');
+               await trackInitiateCheckout({
+                    eventSource: `button-click:${planName}`,
+                    value: selectedPlan?.amount_dollars,
+                    currency: selectedPlan?.currency || 'USD',
+                    contentId: planName,
+                    contentName: selectedPlan?.display_name || planName,
+                    contentType: 'subscription',
+               });
+               console.log('✅ InitiateCheckout tracked successfully with value:', selectedPlan?.amount_dollars);
           } catch (error) {
                // Silently fail - tracking should not block checkout
                console.debug('Failed to track InitiateCheckout:', error);

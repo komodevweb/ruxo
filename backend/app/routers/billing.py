@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
+from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from app.schemas.billing import CheckoutSessionCreate, CheckoutSessionResponse, PortalSessionResponse
@@ -53,8 +54,12 @@ async def create_checkout_session(
     # Capture tracking context for later Purchase event
     client_ip = get_client_ip(request)
     client_user_agent = request.headers.get("user-agent")
+    # Facebook cookies
     fbp = request.cookies.get("_fbp")
     fbc = request.cookies.get("_fbc")
+    # TikTok cookies
+    ttp = request.cookies.get("_ttp")
+    ttclid = request.cookies.get("_ttclid")
     
     # If fbc cookie is not set but fbclid is in URL, create fbc from fbclid
     # Per Facebook docs: fbc format is fb.1.{timestamp}.{fbclid}
@@ -85,7 +90,9 @@ async def create_checkout_session(
         client_ip=client_ip,
         client_user_agent=client_user_agent,
         fbp=fbp,
-        fbc=fbc
+        fbc=fbc,
+        ttp=ttp,
+        ttclid=ttclid,
     )
     return CheckoutSessionResponse(url=url)
 
@@ -164,46 +171,70 @@ async def get_plans(
     
     return plans_data
 
+class InitiateCheckoutRequest(BaseModel):
+    """Optional request body for InitiateCheckout tracking with plan details."""
+    value: Optional[float] = None  # Plan price in dollars
+    currency: Optional[str] = "USD"
+    content_id: Optional[str] = None  # Plan name/ID
+    content_name: Optional[str] = None  # Plan display name
+    content_type: Optional[str] = "subscription"  # Default to subscription for SaaS
+
 @router.post("/track-initiate-checkout")
 async def track_initiate_checkout(
     request: Request,
+    body: Optional[InitiateCheckoutRequest] = None,
     current_user: Optional[UserProfile] = Depends(get_current_user_optional),
 ):
-    """Track InitiateCheckout event for Facebook Conversions API.
+    """Track InitiateCheckout event for Facebook and TikTok Conversions API.
     
     Note: Authentication is optional - we track for both authenticated and anonymous users.
+    
+    Optional body parameters allow tracking the specific plan value when user selects a plan.
+    This helps optimize ad delivery for high-value conversions.
     """
     # Log comprehensive request details to debug auto-triggering
     try:
         referer = request.headers.get("referer")
         user_agent = request.headers.get("user-agent")
         origin = request.headers.get("origin")
-        all_headers = dict(request.headers)
         
-        logger.warning(f"⚠️ INITIATE_CHECKOUT_TRIGGERED: IP={request.client.host if request.client else 'unknown'}")
-        logger.warning(f"   Referer: {referer}")
-        logger.warning(f"   Origin: {origin}")
-        logger.warning(f"   User-Agent: {user_agent}")
-        logger.warning(f"   User: {current_user.email if current_user else 'anonymous'}")
-        logger.warning(f"   All Headers: {all_headers}")
+        logger.info(f"🛒 INITIATE_CHECKOUT: IP={request.client.host if request.client else 'unknown'}")
+        logger.info(f"   User: {current_user.email if current_user else 'anonymous'}")
+        if body and body.value:
+            logger.info(f"   Value: {body.currency} {body.value}")
+            logger.info(f"   Plan: {body.content_name or body.content_id or 'unknown'}")
     except Exception as e:
         logger.warning(f"Failed to log InitiateCheckout request details: {e}")
 
     try:
         from app.services.facebook_conversions import FacebookConversionsService
+        from app.services.tiktok_conversions import TikTokConversionsService
         
         # Get client IP and user agent
         client_ip = get_client_ip(request)
         client_user_agent = request.headers.get("user-agent")
         
-        # Get fbp and fbc cookies if available
+        # Get Facebook cookies if available
         fbp = request.cookies.get("_fbp")
         fbc = request.cookies.get("_fbc")
         
+        # Get TikTok cookies if available
+        ttp = request.cookies.get("_ttp")
+        ttclid = request.cookies.get("_ttclid")
+        
         conversions_service = FacebookConversionsService()
+        tiktok_service = TikTokConversionsService()
+        
+        # Extract value parameters from body (if provided)
+        value = body.value if body else None
+        currency = body.currency if body else "USD"
+        content_ids = [body.content_id] if body and body.content_id else None
+        content_name = body.content_name if body else None
+        content_type = body.content_type if body else "subscription"
         
         # Track event (fire and forget)
         import asyncio
+        # Facebook tracking
         asyncio.create_task(conversions_service.track_initiate_checkout(
             email=current_user.email if current_user else None,
             external_id=str(current_user.id) if current_user else None,
@@ -212,6 +243,29 @@ async def track_initiate_checkout(
             fbp=fbp,
             fbc=fbc,
             event_source_url=f"{settings.FRONTEND_URL}/upgrade",
+            value=value,
+            currency=currency,
+            content_ids=content_ids,
+            content_name=content_name,
+            content_type=content_type,
+            num_items=1 if value else None,
+        ))
+        
+        # TikTok tracking
+        asyncio.create_task(tiktok_service.track_initiate_checkout(
+            email=current_user.email if current_user else None,
+            external_id=str(current_user.id) if current_user else None,
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            event_source_url=f"{settings.FRONTEND_URL}/upgrade",
+            ttp=ttp,
+            ttclid=ttclid,
+            value=value,
+            currency=currency,
+            content_ids=content_ids,
+            content_name=content_name,
+            content_type=content_type,
+            num_items=1 if value else None,
         ))
         
         return {"status": "success"}
@@ -224,20 +278,25 @@ async def track_view_content(
     request: Request,
     current_user: Optional[UserProfile] = Depends(get_current_user_optional),
 ):
-    """Track ViewContent event for Facebook Conversions API.
+    """Track ViewContent event for Facebook and TikTok Conversions API.
     
     Note: Authentication is optional - we track for both authenticated and anonymous users.
     """
     try:
         from app.services.facebook_conversions import FacebookConversionsService
+        from app.services.tiktok_conversions import TikTokConversionsService
         
         # Get client IP and user agent
         client_ip = get_client_ip(request)
         client_user_agent = request.headers.get("user-agent")
         
-        # Get fbp and fbc cookies if available
+        # Get Facebook cookies if available
         fbp = request.cookies.get("_fbp")
         fbc = request.cookies.get("_fbc")
+        
+        # Get TikTok cookies if available
+        ttp = request.cookies.get("_ttp")
+        ttclid = request.cookies.get("_ttclid")
         
         # Get event_source_url from query params or use referer
         event_source_url = request.query_params.get("url") or request.headers.get("referer") or f"{settings.FRONTEND_URL}/"
@@ -245,9 +304,11 @@ async def track_view_content(
         logger.info(f"ViewContent tracking request - URL: {event_source_url}, User: {current_user.id if current_user else 'anonymous'}")
         
         conversions_service = FacebookConversionsService()
+        tiktok_service = TikTokConversionsService()
         
         # Track event (fire and forget)
         import asyncio
+        # Facebook tracking
         asyncio.create_task(conversions_service.track_view_content(
             email=current_user.email if current_user else None,
             external_id=str(current_user.id) if current_user else None,
@@ -256,6 +317,17 @@ async def track_view_content(
             fbp=fbp,
             fbc=fbc,
             event_source_url=event_source_url,
+        ))
+        
+        # TikTok tracking
+        asyncio.create_task(tiktok_service.track_view_content(
+            email=current_user.email if current_user else None,
+            external_id=str(current_user.id) if current_user else None,
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            event_source_url=event_source_url,
+            ttp=ttp,
+            ttclid=ttclid,
         ))
         
         logger.info(f"Triggered ViewContent event tracking for URL: {event_source_url}")
@@ -276,6 +348,7 @@ async def track_add_to_cart(
     """
     try:
         from app.services.facebook_conversions import FacebookConversionsService
+        from app.services.tiktok_conversions import TikTokConversionsService
         
         # Get client IP and user agent
         client_ip = get_client_ip(request)
@@ -285,12 +358,17 @@ async def track_add_to_cart(
         fbp = request.cookies.get("_fbp")
         fbc = request.cookies.get("_fbc")
         
+        # Get TikTok cookies if available
+        ttp = request.cookies.get("_ttp")
+        ttclid = request.cookies.get("_ttclid")
+        
         # Get event_source_url from query params or use referer
         event_source_url = request.query_params.get("url") or request.headers.get("referer") or f"{settings.FRONTEND_URL}/upgrade"
         
         logger.info(f"AddToCart tracking request - URL: {event_source_url}, User: {current_user.id if current_user else 'anonymous'}")
         
         conversions_service = FacebookConversionsService()
+        tiktok_service = TikTokConversionsService()
         
         # Extract first and last name from display_name if available (for authenticated users)
         first_name = None
@@ -306,6 +384,7 @@ async def track_add_to_cart(
         
         # Track event (fire and forget)
         import asyncio
+        # Facebook tracking
         asyncio.create_task(conversions_service.track_add_to_cart(
             currency="USD",
             value=None,  # Optional - we don't know which plan they'll select yet
@@ -324,6 +403,27 @@ async def track_add_to_cart(
             fbc=fbc,
             event_source_url=event_source_url,
             event_id=event_id,
+        ))
+        
+        # TikTok tracking
+        asyncio.create_task(tiktok_service.track_add_to_cart(
+            currency="USD",
+            value=None,  # Optional - we don't know which plan they'll select yet
+            content_ids=["ruxo_subscription"],  # SaaS subscription identifier
+            content_name="Ruxo Subscription Plan",  # SaaS-specific content name
+            content_type="subscription",  # SaaS subscription type (not "product")
+            contents=None,  # Optional - can be set if we have specific plan details
+            num_items=1,  # User is viewing subscription plans
+            email=current_user.email if current_user else None,
+            first_name=first_name,  # Include user's first name
+            last_name=last_name,  # Include user's last name
+            external_id=str(current_user.id) if current_user else None,
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            event_source_url=event_source_url,
+            event_id=event_id,
+            ttp=ttp,  # TikTok cookie for attribution
+            ttclid=ttclid,  # TikTok click ID for ad attribution
         ))
         
         logger.info(f"Triggered AddToCart event tracking for URL: {event_source_url}")

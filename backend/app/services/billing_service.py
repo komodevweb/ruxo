@@ -28,6 +28,8 @@ class BillingService:
         client_user_agent: Optional[str] = None,
         fbp: Optional[str] = None,
         fbc: Optional[str] = None,
+        ttp: Optional[str] = None,
+        ttclid: Optional[str] = None,
         **extra_metadata
     ) -> dict:
         """Build checkout session metadata with tracking context for Purchase events."""
@@ -42,10 +44,16 @@ class BillingService:
             metadata["client_ip"] = client_ip
         if client_user_agent:
             metadata["client_user_agent"] = client_user_agent
+        # Facebook cookies
         if fbp:
             metadata["fbp"] = fbp
         if fbc:
             metadata["fbc"] = fbc
+        # TikTok cookies
+        if ttp:
+            metadata["ttp"] = ttp
+        if ttclid:
+            metadata["ttclid"] = ttclid
         
         # Add any extra metadata (e.g., is_upgrade, existing_subscription_id)
         metadata.update(extra_metadata)
@@ -59,7 +67,9 @@ class BillingService:
         client_ip: Optional[str] = None,
         client_user_agent: Optional[str] = None,
         fbp: Optional[str] = None,
-        fbc: Optional[str] = None
+        fbc: Optional[str] = None,
+        ttp: Optional[str] = None,
+        ttclid: Optional[str] = None
     ) -> str:
         """Create Stripe checkout session for a subscription plan or upgrade existing subscription."""
         import logging
@@ -160,6 +170,7 @@ class BillingService:
                     # This is critical because Subscription.modify() doesn't trigger checkout.session.completed webhook
                     try:
                         from app.services.facebook_conversions import FacebookConversionsService
+                        from app.services.tiktok_conversions import TikTokConversionsService
                         
                         # Calculate purchase value
                         value = plan.amount_cents / 100.0
@@ -177,10 +188,14 @@ class BillingService:
                         logger.info("=" * 80)
                         logger.info(f"💰 [PURCHASE TRACKING] Tracking Purchase for Subscription.modify() upgrade")
                         logger.info(f"💰 [PURCHASE TRACKING] User: {user.email}, Plan: {plan_name}, Value: ${value}")
-                        logger.info(f"💰 [PURCHASE TRACKING] Using tracking context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}..., fbp={fbp}, fbc={fbc}")
+                        logger.info(f"💰 [PURCHASE TRACKING] Using tracking context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}...")
+                        logger.info(f"💰 [PURCHASE TRACKING] Facebook Cookies: fbp={fbp}, fbc={fbc}")
+                        logger.info(f"💰 [PURCHASE TRACKING] TikTok Cookies: ttp={ttp}, ttclid={ttclid}")
                         
                         conversions_service = FacebookConversionsService()
+                        tiktok_service = TikTokConversionsService()
                         import asyncio
+                        # Facebook tracking
                         asyncio.create_task(conversions_service.track_purchase(
                             value=value,
                             currency=currency,
@@ -194,6 +209,21 @@ class BillingService:
                             fbc=fbc,
                             event_source_url=f"{settings.FRONTEND_URL}/upgrade",
                             event_id=event_id,
+                        ))
+                        # TikTok tracking
+                        asyncio.create_task(tiktok_service.track_purchase(
+                            value=value,
+                            currency=currency,
+                            email=user.email,
+                            first_name=first_name,
+                            last_name=last_name,
+                            external_id=str(user.id),
+                            client_ip=client_ip,
+                            client_user_agent=client_user_agent,
+                            event_source_url=f"{settings.FRONTEND_URL}/upgrade",
+                            event_id=event_id,
+                            ttp=ttp,
+                            ttclid=ttclid,
                         ))
                         logger.info(f"✅ [PURCHASE TRACKING] Purchase event triggered for subscription upgrade")
                         logger.info("=" * 80)
@@ -250,7 +280,9 @@ class BillingService:
                                 client_ip=client_ip,
                                 client_user_agent=client_user_agent,
                                 fbp=fbp,
-                                fbc=fbc
+                                fbc=fbc,
+                                ttp=ttp,
+                                ttclid=ttclid,
                             ),
                             "subscription_data": {
                                 "metadata": {
@@ -321,6 +353,8 @@ class BillingService:
                             client_user_agent=client_user_agent,
                             fbp=fbp,
                             fbc=fbc,
+                            ttp=ttp,
+                            ttclid=ttclid,
                             is_upgrade="true",
                             existing_subscription_id=existing_subscription.stripe_subscription_id
                         ),
@@ -439,7 +473,9 @@ class BillingService:
                 client_ip=client_ip,
                 client_user_agent=client_user_agent,
                 fbp=fbp,
-                fbc=fbc
+                fbc=fbc,
+                ttp=ttp,
+                ttclid=ttclid,
             ),
             "subscription_data": {
                 "metadata": {
@@ -478,7 +514,7 @@ class BillingService:
         import logging
         logger = logging.getLogger(__name__)
         
-        # Check if user has existing subscription(s) - handle multiple subscriptions
+        # 1. Check if user has existing subscription(s) in our database
         result = await self.session.execute(
             select(Subscription).where(Subscription.user_id == user.id)
         )
@@ -500,23 +536,38 @@ class BillingService:
             # Verify the customer actually exists in Stripe
             try:
                 customer = stripe.Customer.retrieve(existing_sub.stripe_customer_id)
-                logger.info(f"Found existing Stripe customer {existing_sub.stripe_customer_id} for user {user.id}")
+                logger.info(f"Found existing Stripe customer {existing_sub.stripe_customer_id} for user {user.id} (from subscription)")
                 return existing_sub.stripe_customer_id
             except stripe.error.StripeError as e:
-                # Customer doesn't exist in Stripe, create a new one
-                logger.warning(f"Customer {existing_sub.stripe_customer_id} not found in Stripe: {e}. Creating new customer.")
-                # Update the subscription record with the new customer ID
-                new_customer = stripe.Customer.create(
-                    email=user.email,
-                    metadata={"user_id": str(user.id)}
-                )
-                existing_sub.stripe_customer_id = new_customer.id
-                self.session.add(existing_sub)
-                await self.session.commit()
-                logger.info(f"Created new Stripe customer {new_customer.id} and updated subscription {existing_sub.id}")
-                return new_customer.id
+                # Customer doesn't exist in Stripe, will search by email below
+                logger.warning(f"Customer {existing_sub.stripe_customer_id} not found in Stripe: {e}. Will search by email.")
         
-        # Create new Stripe customer with user_id in metadata
+        # 2. Search Stripe for existing customer by email (handles abandoned checkouts)
+        try:
+            existing_customers = stripe.Customer.list(email=user.email, limit=1)
+            if existing_customers.data:
+                existing_customer = existing_customers.data[0]
+                logger.info(f"Found existing Stripe customer {existing_customer.id} for user {user.id} (by email search)")
+                
+                # Update the customer metadata to include our user_id if not present
+                if not existing_customer.metadata.get("user_id"):
+                    stripe.Customer.modify(
+                        existing_customer.id,
+                        metadata={"user_id": str(user.id)}
+                    )
+                    logger.info(f"Updated customer {existing_customer.id} with user_id metadata")
+                
+                # If we had a stale subscription record, update it
+                if existing_sub:
+                    existing_sub.stripe_customer_id = existing_customer.id
+                    self.session.add(existing_sub)
+                    await self.session.commit()
+                
+                return existing_customer.id
+        except stripe.error.StripeError as e:
+            logger.warning(f"Error searching for customer by email: {e}")
+        
+        # 3. No existing customer found - create new one
         customer = stripe.Customer.create(
             email=user.email,
             metadata={"user_id": str(user.id)}
@@ -624,6 +675,7 @@ class BillingService:
             # Track Purchase event for Facebook Conversions API
             try:
                 from app.services.facebook_conversions import FacebookConversionsService
+                from app.services.tiktok_conversions import TikTokConversionsService
                 from app.models.user import UserProfile
                 from sqlalchemy.future import select
                 
@@ -661,8 +713,12 @@ class BillingService:
                     metadata = session.get("metadata", {})
                     client_ip = metadata.get("client_ip")
                     client_user_agent = metadata.get("client_user_agent")
+                    # Facebook cookies
                     fbp = metadata.get("fbp")
                     fbc = metadata.get("fbc")
+                    # TikTok cookies
+                    ttp = metadata.get("ttp")
+                    ttclid = metadata.get("ttclid")
                     
                     # FALLBACK 1: Check subscription metadata if session metadata is missing
                     if not client_ip and stripe_subscription:
@@ -673,6 +729,8 @@ class BillingService:
                             client_user_agent = sub_metadata.get("client_user_agent")
                             fbp = sub_metadata.get("fbp")
                             fbc = sub_metadata.get("fbc")
+                            ttp = sub_metadata.get("ttp")
+                            ttclid = sub_metadata.get("ttclid")
                     
                     # FALLBACK 2: If still missing, use last_checkout_* from user profile
                     # This handles cases where subscription was modified directly via Stripe API without checkout
@@ -698,12 +756,16 @@ class BillingService:
                     logger.info(f"💰 [PURCHASE TRACKING] Value: ${value} {currency}")
                     logger.info(f"💰 [PURCHASE TRACKING] Event ID: {event_id}")
                     logger.info(f"💰 [PURCHASE TRACKING] Event Source URL: {settings.FRONTEND_URL}/")
-                    logger.info(f"💰 [PURCHASE TRACKING] Tracking Context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}..., fbp={fbp}, fbc={fbc}")
+                    logger.info(f"💰 [PURCHASE TRACKING] Tracking Context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}...")
+                    logger.info(f"💰 [PURCHASE TRACKING] Facebook Cookies: fbp={fbp}, fbc={fbc}")
+                    logger.info(f"💰 [PURCHASE TRACKING] TikTok Cookies: ttp={ttp}, ttclid={ttclid}")
                     
                     conversions_service = FacebookConversionsService()
+                    tiktok_service = TikTokConversionsService()
                     
                     # Track purchase (fire and forget - don't block response)
                     import asyncio
+                    # Facebook tracking
                     asyncio.create_task(conversions_service.track_purchase(
                         value=value,
                         currency=currency,
@@ -717,6 +779,21 @@ class BillingService:
                         fbc=fbc,
                         event_source_url=f"{settings.FRONTEND_URL}/",
                         event_id=event_id,
+                    ))
+                    # TikTok tracking
+                    asyncio.create_task(tiktok_service.track_purchase(
+                        value=value,
+                        currency=currency,
+                        email=user.email,
+                        first_name=first_name,
+                        last_name=last_name,
+                        external_id=str(user.id),
+                        client_ip=client_ip,
+                        client_user_agent=client_user_agent,
+                        event_source_url=f"{settings.FRONTEND_URL}/",
+                        event_id=event_id,
+                        ttp=ttp,
+                        ttclid=ttclid,
                     ))
                     logger.info(f"✅ [PURCHASE TRACKING] Purchase event triggered successfully")
                     logger.info("=" * 80)

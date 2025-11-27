@@ -80,6 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Read cookies from document.cookie (they won't be sent automatically cross-domain)
         let fbpCookie: string | null = null;
         let fbcCookie: string | null = null;
+        let ttpCookie: string | null = null;
+        let ttclidCookie: string | null = null;
         
         try {
           const cookies = document.cookie.split(';');
@@ -89,6 +91,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               fbpCookie = cookie.substring(5);
             } else if (cookie.startsWith('_fbc=')) {
               fbcCookie = cookie.substring(5);
+            } else if (cookie.startsWith('_ttp=')) {
+              ttpCookie = cookie.substring(5);
+            } else if (cookie.startsWith('_ttclid=')) {
+              ttclidCookie = cookie.substring(8);
             }
           }
         } catch (e) {
@@ -108,6 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({
             fbp: fbpCookie,
             fbc: fbcCookie,
+            ttp: ttpCookie,
+            ttclid: ttclidCookie,
             user_agent: userAgentValue,
           }),
         })
@@ -270,13 +278,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (data.new_user === true) {
                 console.log('[OAUTH FRONTEND] 🆕 New user detected - firing CompleteRegistration from real browser...');
                 
-                // IMPORTANT: Read _fbp and _fbc cookies from document.cookie
+                // IMPORTANT: Read tracking cookies from document.cookie
                 // These are first-party cookies set on the FRONTEND domain (e.g., ruxo.ai)
                 // They WON'T be sent automatically via credentials:include because the
                 // backend API is on a different domain (e.g., api.ruxo.ai)
                 // We must read them here and send in the request body
                 let fbpCookie: string | null = null;
                 let fbcCookie: string | null = null;
+                let ttpCookie: string | null = null;
+                let ttclidCookie: string | null = null;
                 
                 try {
                   const cookies = document.cookie.split(';');
@@ -288,6 +298,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     } else if (cookie.startsWith('_fbc=')) {
                       fbcCookie = cookie.substring(5);
                       console.log('[OAUTH FRONTEND] Found _fbc cookie:', fbcCookie.substring(0, 30) + '...');
+                    } else if (cookie.startsWith('_ttp=')) {
+                      ttpCookie = cookie.substring(5);
+                      console.log('[OAUTH FRONTEND] Found _ttp cookie:', ttpCookie.substring(0, 30) + '...');
+                    } else if (cookie.startsWith('_ttclid=')) {
+                      ttclidCookie = cookie.substring(8);
+                      console.log('[OAUTH FRONTEND] Found _ttclid cookie:', ttclidCookie.substring(0, 30) + '...');
                     }
                   }
                 } catch (e) {
@@ -300,11 +316,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 console.log('[OAUTH FRONTEND] Tracking data to send:', {
                   hasFbp: !!fbpCookie,
                   hasFbc: !!fbcCookie,
+                  hasTtp: !!ttpCookie,
+                  hasTtclid: !!ttclidCookie,
                   hasUserAgent: !!userAgentValue,
                 });
                 
                 // Call the complete-registration endpoint from the REAL browser
-                // Send fbp, fbc, and user_agent in the request body (not via cookies)
+                // Send tracking cookies and user_agent in the request body (not via cookies)
                 fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/auth/oauth/complete-registration`, {
                   method: 'POST',
                   headers: {
@@ -315,6 +333,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   body: JSON.stringify({
                     fbp: fbpCookie,
                     fbc: fbcCookie,
+                    ttp: ttpCookie,
+                    ttclid: ttclidCookie,
                     user_agent: userAgentValue,
                   }),
                 })
@@ -461,13 +481,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, displayName: string) => {
     try {
+      // Extract tracking cookies (cross-domain cookies don't work, must send in body)
+      let fbpCookie: string | null = null;
+      let fbcCookie: string | null = null;
+      let ttpCookie: string | null = null;
+      let ttclidCookie: string | null = null;
+      
+      try {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+          cookie = cookie.trim();
+          if (cookie.startsWith('_fbp=')) {
+            fbpCookie = cookie.substring(5);
+          } else if (cookie.startsWith('_fbc=')) {
+            fbcCookie = cookie.substring(5);
+          } else if (cookie.startsWith('_ttp=')) {
+            ttpCookie = cookie.substring(5);
+          } else if (cookie.startsWith('_ttclid=')) {
+            ttclidCookie = cookie.substring(8);
+          }
+        }
+      } catch (e) {
+        console.warn('[SIGNUP] Could not read tracking cookies:', e);
+      }
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           email, 
           password,
-          display_name: displayName
+          display_name: displayName,
+          fbp: fbpCookie,
+          fbc: fbcCookie,
+          ttp: ttpCookie,
+          ttclid: ttclidCookie,
         }),
         credentials: 'include',
       });
