@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 function Timer() {
+  const { user, loading } = useAuth();
   const [timeLeft, setTimeLeft] = useState({
     days: 0,
     hours: 0,
@@ -10,6 +12,10 @@ function Timer() {
     seconds: 0
   });
   const [mounted, setMounted] = useState(false);
+
+  // If user has a plan, don't show timer
+  // We check for plan_name existence and that it's not a free plan if your system uses "Free" as a plan name
+  const hasPlan = user && user.plan_name && user.plan_name.toLowerCase() !== 'free';
 
   useEffect(() => {
     setMounted(true);
@@ -48,6 +54,11 @@ function Timer() {
 
     return () => clearInterval(timer);
   }, []);
+
+  // Hide timer while loading to prevent flash for paid users, or if user has a plan
+  if (loading || hasPlan) {
+    return null;
+  }
 
   // Prevent hydration mismatch by showing placeholder until mounted
   if (!mounted) {

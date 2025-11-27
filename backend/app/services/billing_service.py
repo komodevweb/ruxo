@@ -929,6 +929,13 @@ class BillingService:
             
             self.session.add(subscription)
             await self.session.commit()
+            
+            # Invalidate user cache
+            try:
+                from app.utils.cache import invalidate_user_cache
+                await invalidate_user_cache(str(subscription.user_id))
+            except Exception as e:
+                logger.error(f"Failed to invalidate user cache: {e}")
 
     async def _handle_subscription_deleted(self, subscription_data):
         """Handle subscription cancellation - removes all user credits."""
@@ -945,6 +952,13 @@ class BillingService:
             subscription.status = "canceled"
             self.session.add(subscription)
             await self.session.commit()
+            
+            # Invalidate user cache
+            try:
+                from app.utils.cache import invalidate_user_cache
+                await invalidate_user_cache(str(subscription.user_id))
+            except Exception as e:
+                logger.error(f"Failed to invalidate user cache: {e}")
             
             # Remove all credits when subscription is canceled
             wallet = await self.credits_service.get_wallet(subscription.user_id)
@@ -1058,6 +1072,13 @@ class BillingService:
         subscription.status = "canceled"
         self.session.add(subscription)
         await self.session.commit()
+        
+        # Invalidate user cache
+        try:
+            from app.utils.cache import invalidate_user_cache
+            await invalidate_user_cache(str(user_id))
+        except Exception as e:
+            logger.error(f"Failed to invalidate user cache: {e}")
         
         logger.info(f"charge.refunded: Successfully processed refund for user {user_id} - credits wiped and subscription canceled")
 
@@ -1201,6 +1222,14 @@ class BillingService:
         self.session.add(subscription)
         await self.session.commit()
         await self.session.refresh(subscription)
+        
+        # Invalidate user cache so frontend updates immediately (e.g. hide timer)
+        try:
+            from app.utils.cache import invalidate_user_cache
+            await invalidate_user_cache(str(user_id))
+            logger.info(f"Invalidated user cache for {user_id}")
+        except Exception as e:
+            logger.error(f"Failed to invalidate user cache: {e}")
         
         # Reset credits to plan amount (monthly reset)
         await self._reset_monthly_credits(subscription)

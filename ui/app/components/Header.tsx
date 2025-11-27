@@ -9,6 +9,11 @@ function Header() {
   const router = useRouter();
   const { user, signOut, loading } = useAuth();
 
+  // Check if user has a paid plan to adjust header position
+  // If user has a plan or is loading, the timer is hidden, so header should be at top-0
+  const hasPlan = user && user.plan_name && user.plan_name.toLowerCase() !== 'free';
+  const topClass = (loading || hasPlan) ? "top-0" : "top-[24px] md:top-[30px]";
+
   const authPages = ["/login-email", "/signup-email", "/forgot-password", "/login", "/signup-password", "/signup", "/verify-email"];
 
   const isAuthPage = authPages.includes(pathname);
@@ -23,7 +28,7 @@ function Header() {
   }
 
   return (
-    <header className="bg-black-1100/80 backdrop-blur-md fixed left-0 w-full top-[24px] md:top-[32px] z-[1000] p-4 font-inter flex items-center justify-between">
+    <header className={`bg-black-1100/80 backdrop-blur-md fixed left-0 w-full ${topClass} z-[1000] p-4 font-inter flex items-center justify-between`}>
       <Link href="/">
         <img src="/images/logo.svg" className="h-[28.8px] md:h-[38.4px] md:w-auto w-auto" alt="Ruxo" />
       </Link>
