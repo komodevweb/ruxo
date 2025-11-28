@@ -168,11 +168,9 @@ const VideoCard = memo(({
           {/* Play Icon Overlay - Shows when paused */}
           {!isPlaying && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-black/20">
-              <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </div>
+              <svg className="w-10 h-10 md:w-12 md:h-12 text-white/80 drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
+                   <path d="M8 5v14l11-7z" />
+              </svg>
             </div>
           )}
 

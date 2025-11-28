@@ -23,13 +23,20 @@ interface Plan {
 
 const VideoCard = ({ src }: { src: string }) => {
      const videoRef = useRef<HTMLVideoElement>(null);
+     const [isPlaying, setIsPlaying] = useState(false);
+     const [isMobile, setIsMobile] = useState(false);
+
+     useEffect(() => {
+          const checkMobile = () => setIsMobile(window.innerWidth < 768);
+          checkMobile();
+          window.addEventListener('resize', checkMobile);
+          return () => window.removeEventListener('resize', checkMobile);
+     }, []);
 
      const handleMouseEnter = () => {
-          if (videoRef.current) {
+          if (!isMobile && videoRef.current) {
                videoRef.current.muted = false;
                videoRef.current.play().catch(e => {
-                    // Autoplay with sound might fail due to browser policy
-                    // Fallback to muted play if needed, but user asked for volume
                     console.warn('Autoplay with sound failed', e);
                     if (videoRef.current) {
                          videoRef.current.muted = true;
@@ -40,10 +47,22 @@ const VideoCard = ({ src }: { src: string }) => {
      };
 
      const handleMouseLeave = () => {
-          if (videoRef.current) {
+          if (!isMobile && videoRef.current) {
                videoRef.current.pause();
                videoRef.current.currentTime = 0;
                videoRef.current.muted = true;
+          }
+     };
+
+     const handleClick = (e: React.MouseEvent) => {
+          if (isMobile && videoRef.current) {
+               e.stopPropagation();
+               if (videoRef.current.paused) {
+                    videoRef.current.muted = false;
+                    videoRef.current.play().catch(console.error);
+               } else {
+                    videoRef.current.pause();
+               }
           }
      };
 
@@ -52,6 +71,7 @@ const VideoCard = ({ src }: { src: string }) => {
                className="relative rounded-xl overflow-hidden aspect-[9/16] md:aspect-video bg-black/20 border border-white/10 cursor-pointer group"
                onMouseEnter={handleMouseEnter}
                onMouseLeave={handleMouseLeave}
+               onClick={handleClick}
           >
                <video 
                     ref={videoRef}
@@ -60,9 +80,15 @@ const VideoCard = ({ src }: { src: string }) => {
                     loop
                     muted
                     playsInline
+                    preload="metadata"
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                    onLoadedMetadata={(e) => {
+                         e.currentTarget.currentTime = 0.1;
+                    }}
                />
-               <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-black/20 group-hover:bg-transparent transition-all">
-                    <svg className="w-10 h-10 md:w-12 md:h-12 text-white/80 opacity-100 group-hover:opacity-0 transition-opacity drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
+               <div className={`absolute inset-0 flex items-center justify-center pointer-events-none bg-black/20 transition-all duration-300 ${isPlaying ? 'opacity-0' : 'opacity-100'} ${!isMobile ? 'group-hover:opacity-0' : ''}`}>
+                    <svg className="w-10 h-10 md:w-12 md:h-12 text-white/80 drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
                          <path d="M8 5v14l11-7z" />
                     </svg>
                </div>
