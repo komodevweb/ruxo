@@ -215,28 +215,28 @@ class FacebookConversionsService:
                 contents = custom_data.get("contents") if custom_data else None
                 num_items = custom_data.get("num_items") if custom_data else None
                 event_url = event_data.get("event_source_url") if event_data else None
-                logger.info(f"🛒 AddToCart Event Details: value={value}, currency={currency}, content_ids={content_ids}, content_name={content_name}, content_type={content_type}, num_items={num_items}, url={event_url}, user={user_data.get('em', 'N/A')[:10]}..., external_id={user_data.get('external_id', 'N/A')}")
+                logger.debug(f"🛒 AddToCart Event Details: value={value}, currency={currency}, content_ids={content_ids}, content_name={content_name}, content_type={content_type}, num_items={num_items}, url={event_url}, user={user_data.get('em', 'N/A')[:10]}..., external_id={user_data.get('external_id', 'N/A')}")
                 
                 # Log all user_data fields for verification
-                logger.info(f"📊 AddToCart User Data Fields:")
-                logger.info(f"  - em (email): {'✓' if user_data.get('em') else '✗'}")
-                logger.info(f"  - fn (first name): {'✓' if user_data.get('fn') else '✗'}")
-                logger.info(f"  - ln (last name): {'✓' if user_data.get('ln') else '✗'}")
-                logger.info(f"  - external_id: {'✓' if user_data.get('external_id') else '✗'}")
-                logger.info(f"  - client_ip_address: {'✓' if user_data.get('client_ip_address') else '✗'}")
-                logger.info(f"  - client_user_agent: {'✓' if user_data.get('client_user_agent') else '✗'}")
-                logger.info(f"  - fbp: {'✓' if user_data.get('fbp') else '✗'}")
-                logger.info(f"  - fbc: {'✓' if user_data.get('fbc') else '✗'}")
+                logger.debug(f"📊 AddToCart User Data Fields:")
+                logger.debug(f"  - em (email): {'✓' if user_data.get('em') else '✗'}")
+                logger.debug(f"  - fn (first name): {'✓' if user_data.get('fn') else '✗'}")
+                logger.debug(f"  - ln (last name): {'✓' if user_data.get('ln') else '✗'}")
+                logger.debug(f"  - external_id: {'✓' if user_data.get('external_id') else '✗'}")
+                logger.debug(f"  - client_ip_address: {'✓' if user_data.get('client_ip_address') else '✗'}")
+                logger.debug(f"  - client_user_agent: {'✓' if user_data.get('client_user_agent') else '✗'}")
+                logger.debug(f"  - fbp: {'✓' if user_data.get('fbp') else '✗'}")
+                logger.debug(f"  - fbc: {'✓' if user_data.get('fbc') else '✗'}")
                 
                 # Log all custom_data fields for verification
-                logger.info(f"📦 AddToCart Custom Data Fields:")
-                logger.info(f"  - currency: {'✓' if currency else '✗'}")
-                logger.info(f"  - value: {'✓' if value is not None else '✗'}")
-                logger.info(f"  - content_ids: {'✓' if content_ids else '✗'}")
-                logger.info(f"  - content_name: {'✓' if content_name else '✗'}")
-                logger.info(f"  - content_type: {'✓' if content_type else '✗'}")
-                logger.info(f"  - contents: {'✓' if contents else '✗'}")
-                logger.info(f"  - num_items: {'✓' if num_items is not None else '✗'}")
+                logger.debug(f"📦 AddToCart Custom Data Fields:")
+                logger.debug(f"  - currency: {'✓' if currency else '✗'}")
+                logger.debug(f"  - value: {'✓' if value is not None else '✗'}")
+                logger.debug(f"  - content_ids: {'✓' if content_ids else '✗'}")
+                logger.debug(f"  - content_name: {'✓' if content_name else '✗'}")
+                logger.debug(f"  - content_type: {'✓' if content_type else '✗'}")
+                logger.debug(f"  - contents: {'✓' if contents else '✗'}")
+                logger.debug(f"  - num_items: {'✓' if num_items is not None else '✗'}")
             
             # Build the request payload
             payload = {
