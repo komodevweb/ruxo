@@ -479,12 +479,9 @@ function page() {
                                    <span className="px-3 py-1.5 rounded-full bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/40 text-xs md:text-sm text-white font-medium">🔥 Sora 2 Pro</span>
                                    <span className="px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/40 text-xs md:text-sm text-white font-medium">🔥 Google Veo 3.1</span>
                                    <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Kling v2.5 Pro</span>
-                                   <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Minimax Hailuo</span>
                                    <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Seedance Pro</span>
                               </div>
                               <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 max-w-4xl mx-auto">
-                                   <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Flux 1.1 Pro Ultra</span>
-                                   <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Stable Diffusion 3.5</span>
                                    <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Wan 2.5</span>
                                    <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-white/80">Nano Banana Pro</span>
                                    <span className="px-3 py-1.5 rounded-full bg-blue2/20 border border-blue2/40 text-xs md:text-sm text-blue2 font-medium">+ New Models Weekly</span>
