@@ -25,6 +25,7 @@ const VideoCard = memo(({
   const [aspectRatioStyle, setAspectRatioStyle] = useState<any>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const hasOutput = !!job.output_url;
   const isRunning = (job.status === "pending" || job.status === "running") && !hasOutput;
 
@@ -76,15 +77,19 @@ const VideoCard = memo(({
   }, [job]);
 
   const forceDownload = async (url: string, filename: string) => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+
     try {
       // Try to use fetch for better blob handling if possible
       const response = await fetch(url);
       const blob = await response.blob();
       
-      // Mobile sharing (iOS/Android)
-      if (navigator.share && navigator.canShare) {
+      // Mobile sharing (iOS/Android) - Only use on mobile devices
+      if (isMobile && navigator.share && navigator.canShare) {
         try {
-          const file = new File([blob], filename, { type: blob.type });
+          // Force video/mp4 type to ensure iOS recognizes it as a video file
+          const file = new File([blob], filename, { type: 'video/mp4' });
           if (navigator.canShare({ files: [file] })) {
             await navigator.share({
               files: [file],
@@ -93,14 +98,15 @@ const VideoCard = memo(({
             return;
           }
         } catch (shareError: any) {
-          // Ignore abort/cancel errors, log others
-          if (shareError.name !== 'AbortError') {
-            console.log("Web Share API failed, using fallback");
+          // Ignore abort/cancel errors (user cancelled share sheet)
+          if (shareError.name === 'AbortError') {
+            return;
           }
+          console.log("Web Share API failed, using fallback", shareError);
         }
       }
       
-      // Fallback: Blob URL download
+      // Fallback: Blob URL download (Desktop / Non-sharing Mobile)
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
@@ -113,6 +119,8 @@ const VideoCard = memo(({
       // Final fallback: Direct link open (fastest but less control)
       console.error("Download failed, opening directly:", error);
       window.open(url, '_blank');
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -190,21 +198,26 @@ const VideoCard = memo(({
             </div>
           )}
 
-          {/* Download Button - Always visible */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              forceDownload(job.output_url, `video-${job.job_id.slice(0, 8)}.mp4`);
-            }}
-            className="absolute top-3 right-3 bg-black/50 backdrop-blur-md border border-white/20 text-white w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white hover:text-black z-20"
-            title="Download Video"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-          </button>
+            {/* Download Button - Always visible */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                forceDownload(job.output_url, `video-${job.job_id.slice(0, 8)}.mp4`);
+              }}
+              disabled={isDownloading}
+              className={`absolute top-3 right-3 bg-black/50 backdrop-blur-md border border-white/20 text-white w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white hover:text-black z-20 ${isDownloading ? 'opacity-70 cursor-wait' : ''}`}
+              title="Download Video"
+            >
+              {isDownloading ? (
+                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+              )}
+            </button>
         </>
       ) : isRunning ? (
         <div className="w-full h-full bg-gray-900/50 flex flex-col items-center justify-center relative">
