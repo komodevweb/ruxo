@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, memo, useCallback } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 
 interface VideoGalleryProps {
   jobs: any[];
@@ -9,16 +9,217 @@ interface VideoGalleryProps {
   onSelectJob: (job: any) => void;
 }
 
+// Separate VideoCard component to handle individual state logic
+const VideoCard = memo(({ 
+  job, 
+  loadingPercentage, 
+  onSelectJob, 
+  playPromise 
+}: { 
+  job: any; 
+  loadingPercentage?: number; 
+  onSelectJob: (job: any) => void;
+  playPromise: { current: Promise<void> | undefined };
+}) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [aspectRatioStyle, setAspectRatioStyle] = useState<any>(undefined);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const hasOutput = !!job.output_url;
+  const isRunning = (job.status === "pending" || job.status === "running") && !hasOutput;
+
+  // Determine initial style from metadata
+  useEffect(() => {
+    const getInitialStyle = () => {
+      // 1. Check explicit aspect_ratio field (e.g., "9:16")
+      if (job.aspect_ratio && typeof job.aspect_ratio === 'string') {
+        const [w, h] = job.aspect_ratio.split(':').map(Number);
+        if (w && h) return { aspectRatio: `${w}/${h}` };
+      }
+
+      // 2. Check resolution field (e.g., "1280*720" or "720x1280")
+      if (job.resolution && typeof job.resolution === 'string') {
+        if (job.resolution.includes('*')) {
+          const [w, h] = job.resolution.split('*').map(Number);
+          if (w && h) return { aspectRatio: `${w}/${h}` };
+        }
+        if (job.resolution.includes('x')) {
+          const [w, h] = job.resolution.split('x').map(Number);
+          if (w && h) return { aspectRatio: `${w}/${h}` };
+        }
+      }
+      
+      // 3. Check separate width/height
+      if (job.width && job.height) {
+        return { aspectRatio: `${job.width}/${job.height}` };
+      }
+
+      // 4. Check size field from text-to-video (e.g., "1280*720")
+      if (job.size && typeof job.size === 'string' && job.size.includes('*')) {
+          const [w, h] = job.size.split('*').map(Number);
+          if (w && h) return { aspectRatio: `${w}/${h}` };
+      }
+      
+      // Default fallback (will be updated by onLoadedMetadata)
+      return { aspectRatio: '16/9' };
+    };
+    
+    setAspectRatioStyle(getInitialStyle());
+  }, [job]);
+
+  const forceDownload = async (url: string, filename: string) => {
+    try {
+      // Try to use fetch for better blob handling if possible
+      const response = await fetch(url);
+      const blob = await response.blob();
+      
+      // Mobile sharing (iOS/Android)
+      if (navigator.share && navigator.canShare) {
+        try {
+          const file = new File([blob], filename, { type: blob.type });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: filename,
+            });
+            return;
+          }
+        } catch (shareError: any) {
+          // Ignore abort/cancel errors, log others
+          if (shareError.name !== 'AbortError') {
+            console.log("Web Share API failed, using fallback");
+          }
+        }
+      }
+      
+      // Fallback: Blob URL download
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      // Final fallback: Direct link open (fastest but less control)
+      console.error("Download failed, opening directly:", error);
+      window.open(url, '_blank');
+    }
+  };
+
+  const togglePlay = (e: React.MouseEvent) => {
+    if (hasOutput && videoRef.current) {
+      e.stopPropagation();
+      const video = videoRef.current;
+      if (video.paused) {
+        video.play().catch(console.error);
+        video.muted = false; // Enable sound on play
+      } else {
+        video.pause();
+      }
+    }
+  };
+
+  return (
+    <div
+      onClick={togglePlay}
+      className={`relative overflow-hidden rounded-2xl bg-[#1A1D24] border border-white/10 group ${
+        hasOutput 
+          ? "cursor-pointer hover:border-white/30 hover:shadow-2xl hover:shadow-blue-900/10" 
+          : "cursor-not-allowed"
+      } transition-all duration-300`}
+      style={aspectRatioStyle}
+    >
+      {hasOutput ? (
+        <>
+          <video
+            ref={videoRef}
+            key={job.output_url}
+            src={job.output_url}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            muted
+            playsInline
+            preload="metadata"
+            controls={false}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onLoadedMetadata={(e) => {
+              try {
+                const video = e.currentTarget;
+                if (video.videoWidth && video.videoHeight) {
+                  setAspectRatioStyle({ 
+                    aspectRatio: `${video.videoWidth}/${video.videoHeight}` 
+                  });
+                }
+                video.currentTime = 0.1;
+              } catch (err) {
+                console.error("Error seeking video:", err);
+              }
+            }}
+          />
+          
+          {/* Model Badge - Always visible (non-intrusive) */}
+          {(job.model_display_name || job.settings?.model_display_name) && (
+            <div className="absolute bottom-3 left-3 bg-black/70 backdrop-blur-md border border-white/10 text-white text-[10px] font-medium px-2.5 py-1 rounded-full z-10 pointer-events-none opacity-100 transition-opacity duration-300 group-hover:opacity-100">
+              {job.model_display_name || job.settings?.model_display_name}
+            </div>
+          )}
+
+          {/* Play Icon Overlay - Shows when paused */}
+          {!isPlaying && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-black/20">
+              <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
+            </div>
+          )}
+
+          {/* Download Button - Always visible */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              forceDownload(job.output_url, `video-${job.job_id.slice(0, 8)}.mp4`);
+            }}
+            className="absolute top-3 right-3 bg-black/50 backdrop-blur-md border border-white/20 text-white w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 hover:bg-white hover:text-black z-20"
+            title="Download Video"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
+        </>
+      ) : isRunning ? (
+        <div className="w-full h-full bg-gray-900/50 flex flex-col items-center justify-center relative">
+           <div className="w-12 h-12 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin mb-4"></div>
+           <p className="text-sm font-medium text-white/80">
+              Generating... {Math.round(loadingPercentage || 0)}%
+           </p>
+           <div className="absolute bottom-0 left-0 h-1 bg-blue-500/20 w-full">
+              <div 
+                 className="h-full bg-blue-500 transition-all duration-300"
+                 style={{ width: `${Math.round(loadingPercentage || 0)}%` }}
+              />
+           </div>
+        </div>
+      ) : null}
+    </div>
+  );
+});
+VideoCard.displayName = "VideoCard";
+
 function VideoGalleryInner({ jobs, selectedJobId, loading = false, onSelectJob }: VideoGalleryProps) {
-  // Show loading skeletons when loading
   if (loading) {
     return (
       <section className="py-12 relative">
         <div className="max-w-[1320px] px-5 mx-auto relative">
           <h2 className="text-xl font-medium text-white mb-6">Gallery</h2>
-          <div className="columns-1 md:columns-2 gap-4 space-y-4 relative">
-            {Array.from({ length: 8 }).map((_, idx) => (
-              <div key={`skeleton-${idx}`} className="break-inside-avoid relative overflow-hidden rounded-xl mb-4 bg-gray-1600/20" style={{ minHeight: '200px' }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div key={`skeleton-${idx}`} className="aspect-video relative overflow-hidden rounded-2xl bg-gray-1600/20">
                 <div className="w-full h-full bg-gray-1200/30 relative overflow-hidden">
                   <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent" />
                 </div>
@@ -32,16 +233,17 @@ function VideoGalleryInner({ jobs, selectedJobId, loading = false, onSelectJob }
   
   if (!jobs || jobs.length === 0) return null;
   
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
+  const playPromises = useRef<Record<string, Promise<void> | undefined>>({});
+
   // Track loading percentages for each running job
-  // Load from localStorage on mount to persist across refreshes
   const [loadingPercentages, setLoadingPercentages] = useState<Record<string, number>>(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('videoLoadingPercentages');
         if (saved) {
-          const parsed = JSON.parse(saved);
-          // Only keep percentages for jobs that are still running
-          return parsed;
+          return JSON.parse(saved);
         }
       } catch (e) {
         console.error('Failed to load saved percentages:', e);
@@ -49,9 +251,8 @@ function VideoGalleryInner({ jobs, selectedJobId, loading = false, onSelectJob }
     }
     return {};
   });
+  
   const intervalRefs = useRef<Record<string, NodeJS.Timeout>>({});
-  const videoRefs = useRef<Record<string, HTMLVideoElement>>({});
-  const playPromises = useRef<Record<string, Promise<void> | undefined>>({});
   
   // Save percentages to localStorage whenever they change
   useEffect(() => {
@@ -73,53 +274,38 @@ function VideoGalleryInner({ jobs, selectedJobId, loading = false, onSelectJob }
       const jobId = job.job_id;
       
       if (isRunning) {
-        // Initialize percentage if not exists (start at 0 or load from localStorage)
         setLoadingPercentages((prev) => {
           if (!(jobId in prev)) {
             return { ...prev, [jobId]: 0 };
           }
-          return prev; // Don't update if already exists
+          return prev;
         });
         
-        // Start or continue loading animation for this job
         if (!intervalRefs.current[jobId]) {
-          // Start incrementing percentage with easing (slower as it approaches 100%)
           intervalRefs.current[jobId] = setInterval(() => {
             setLoadingPercentages((prev) => {
               const current = prev[jobId] || 0;
-              
-              // Easing function: the closer to 100%, the slower it gets
-              // Use exponential easing: remaining percentage decreases exponentially
               const remaining = 100 - current;
-              const baseIncrement = 0.8; // Base increment per update
-              
-              // Calculate increment based on remaining percentage
-              // As remaining decreases, increment decreases exponentially
-              // Formula: increment = base * (remaining/100)^2 + minIncrement
+              const baseIncrement = 0.8;
               const progressFactor = (remaining / 100) * (remaining / 100);
               const increment = baseIncrement * progressFactor + 0.05;
-              
-              const newValue = Math.min(99.5, current + increment); // Cap at 99.5% until actually completed
+              const newValue = Math.min(99.5, current + increment);
               return { ...prev, [jobId]: newValue };
             });
-          }, 100); // Update every 100ms for smoother animation
+          }, 100);
         }
       } else {
-        // Clean up interval if job is completed or failed
         if (intervalRefs.current[jobId]) {
           clearInterval(intervalRefs.current[jobId]);
           delete intervalRefs.current[jobId];
         }
-        // Set to 100% if completed, remove if failed
         if (job.status === "completed") {
           setLoadingPercentages((prev) => {
-            // Only update if not already 100
             if (prev[jobId] !== 100) {
               return { ...prev, [jobId]: 100 };
             }
             return prev;
           });
-          // Clean up after a delay
           const timeoutId = setTimeout(() => {
             setLoadingPercentages((prev) => {
               const newState = { ...prev };
@@ -130,7 +316,6 @@ function VideoGalleryInner({ jobs, selectedJobId, loading = false, onSelectJob }
           timeoutIds.push(timeoutId);
         } else if (job.status === "failed") {
           setLoadingPercentages((prev) => {
-            // Only update if jobId exists
             if (jobId in prev) {
               const newState = { ...prev };
               delete newState[jobId];
@@ -142,272 +327,125 @@ function VideoGalleryInner({ jobs, selectedJobId, loading = false, onSelectJob }
       }
     });
     
-    // Cleanup on unmount
     return () => {
       Object.values(intervalRefs.current).forEach((interval) => clearInterval(interval));
       timeoutIds.forEach((timeoutId) => clearTimeout(timeoutId));
     };
-  }, [jobs]); // Only depend on jobs, not loadingPercentages
-
-  // Ensure videos show first frame when they load
-  useEffect(() => {
-    Object.entries(videoRefs.current).forEach(([jobId, video]) => {
-      if (video && video.readyState >= 2) {
-        // Video has data, ensure first frame is visible
-        try {
-          // Only reset if the video is PAUSED. If it's playing (hovered), don't touch it!
-          // This prevents "flickering" resets when the job list polls in the background.
-          if (video.currentTime !== 0 && video.paused) {
-            video.currentTime = 0;
-          }
-        } catch (err) {
-          // Ignore
-        }
-      }
-    });
   }, [jobs]);
 
-  const forceDownload = async (url: string, filename: string) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      
-      // Check if Web Share API is available (iOS Safari, Chrome on Android)
-      // This allows saving directly to Photos app on iOS
-      if (navigator.share && navigator.canShare) {
-        try {
-          const file = new File([blob], filename, { type: blob.type });
-          
-          // Check if we can share this file
-          if (navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: filename,
-            });
-            return; // Successfully shared, exit early
-          }
-        } catch (shareError: any) {
-          // If user cancels share or it fails, fall through to download
-          if (shareError.name !== 'AbortError') {
-            console.log("Web Share API not available or failed, using fallback:", shareError);
-          }
-        }
+  // Process jobs
+  const processedJobs = jobs
+    .filter((job: any, index: number, self: any[]) => 
+      index === self.findIndex((j: any) => j.job_id === job.job_id)
+    )
+    .filter((job: any) => {
+      const hasOutput = !!job.output_url;
+      const isRunning = (job.status === "pending" || job.status === "running") && !hasOutput;
+      return hasOutput || isRunning;
+    });
+
+  const totalPages = Math.ceil(processedJobs.length / itemsPerPage);
+  const currentJobs = processedJobs.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+  
+  // Reset page if out of bounds (e.g. filtering reduced count)
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+        setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  // Pagination handlers
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(prev => prev - 1);
+      // Scroll to top of gallery
+      const galleryElement = document.getElementById('video-gallery-section');
+      if (galleryElement) {
+        galleryElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
-      
-      // Fallback for desktop or when Web Share API is not available
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (error) {
-      console.error("Download failed:", error);
-      // Final fallback to opening in new tab
-      window.open(url, '_blank');
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(prev => prev + 1);
+      // Scroll to top of gallery
+      const galleryElement = document.getElementById('video-gallery-section');
+      if (galleryElement) {
+        galleryElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   };
 
   return (
-    <section className="py-12 relative">
+    <section id="video-gallery-section" className="py-8 relative">
       <div className="max-w-[1320px] px-5 mx-auto relative">
-        <h2 className="text-xl font-medium text-white mb-6">Gallery</h2>
-      <div className="columns-1 md:columns-2 gap-4 space-y-4 relative">
-        {jobs
-          // Deduplicate by job_id (keep first occurrence)
-          .filter((job: any, index: number, self: any[]) => 
-            index === self.findIndex((j: any) => j.job_id === job.job_id)
-          )
-          .filter((job: any) => {
-            // Only show jobs that have output OR are currently running
-            const hasOutput = !!job.output_url;
-            const isRunning = (job.status === "pending" || job.status === "running") && !hasOutput;
-            return hasOutput || isRunning;
-          })
-          .map((job: any) => {
-          const hasOutput = !!job.output_url;
-          const isCompleted = job.status === "completed" && hasOutput;
-          const isSelected = selectedJobId === job.job_id;
-          const isRunning = (job.status === "pending" || job.status === "running") && !hasOutput;
-          
-          return (
-            <div
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-medium text-white">Gallery</h2>
+          {processedJobs.length > 0 && (
+            <div className="text-xs text-white/50 font-medium">
+              {processedJobs.length} Generation{processedJobs.length !== 1 ? 's' : ''}
+            </div>
+          )}
+        </div>
+
+        {/* Grid Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {currentJobs.map((job: any) => (
+            <VideoCard 
               key={job.job_id}
-              onClick={() => {
-                if (hasOutput) {
-                  onSelectJob(job);
-                }
-              }}
-              onMouseEnter={() => {
-                if (hasOutput) {
-                  const video = videoRefs.current[job.job_id];
-                  if (video) {
-                    // Prevent multiple sequences from stacking (fixes flickering on rapid hover)
-                    if (playPromises.current[job.job_id]) return;
+              job={job}
+              loadingPercentage={loadingPercentages[job.job_id]}
+              onSelectJob={onSelectJob}
+              playPromise={{ current: undefined }} // Pass a fresh ref-like object for local tracking
+            />
+          ))}
+        </div>
 
-                    // Create a robust play sequence
-                    let playSequence: Promise<void>;
-                    const runSequence = async () => {
-                      try {
-                        // 1. Try to play unmuted (optimistic)
-                        video.muted = false;
-                        video.currentTime = 0;
-                        await video.play();
-                      } catch (err: any) {
-                        // 2. Handle interruptions (User hovered out)
-                        if (err.name === 'AbortError') return;
-                        
-                        // 3. Handle Autoplay Policy (Browser blocked sound)
-                        if (err.name === 'NotAllowedError') {
-                            // Check if we're still the active hover session
-                            // If onMouseLeave ran, it would have removed/replaced this promise
-                            if (playPromises.current[job.job_id] !== playSequence) return;
-
-                            // Fallback to muted play
-                            try {
-                                video.muted = true;
-                                await video.play();
-                            } catch (mutedErr: any) {
-                                if (mutedErr.name !== 'AbortError') {
-                                    console.error("Muted play failed:", mutedErr);
-                                }
-                            }
-                        } else {
-                            console.error("Play failed:", err);
-                        }
-                      }
-                    };
-                    
-                    playSequence = runSequence();
-                    
-                    // Track this specific sequence
-                    playPromises.current[job.job_id] = playSequence;
-                  }
-                }
-              }}
-              onMouseLeave={() => {
-                if (hasOutput) {
-                  const video = videoRefs.current[job.job_id];
-                  // 1. Mark current sequence as cancelled by removing it
-                  delete playPromises.current[job.job_id];
-                  
-                  // 2. Immediately stop playback
-                  if (video) {
-                    video.pause();
-                    video.currentTime = 0;
-                    video.muted = true; // Reset to safe state
-                  }
-                }
-              }}
-              className={`break-inside-avoid relative overflow-hidden rounded-xl group mb-4 bg-gray-1600/20 ${
-                hasOutput 
-                  ? "cursor-pointer" 
-                  : "cursor-not-allowed"
+        {/* Modern Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center mt-10 gap-2">
+            <button
+              onClick={handlePrevPage}
+              disabled={currentPage === 1}
+              className={`h-10 w-10 rounded-xl flex items-center justify-center border transition-all duration-200 ${
+                currentPage === 1
+                  ? "border-white/5 text-white/20 cursor-not-allowed bg-white/[0.02]"
+                  : "border-white/10 text-white hover:bg-white/10 hover:border-white/20 bg-white/5"
               }`}
             >
-                {hasOutput ? (
-                  <>
-                    <video
-                      ref={(el) => {
-                        // Properly manage refs
-                        if (el) {
-                          videoRefs.current[job.job_id] = el;
-                        } else {
-                          delete videoRefs.current[job.job_id];
-                        }
-                      }}
-                      key={job.output_url} // Force re-render if URL changes
-                      src={job.output_url}
-                      className="w-full h-auto object-contain transition-transform duration-300 group-hover:scale-105 bg-gray-1600/20"
-                      style={{ display: 'block' }}
-                      muted
-                      loop
-                      playsInline
-                      preload="auto"
-                      controls={false}
-                      onError={(e) => {
-                        console.error("Video load error:", e, "URL:", job.output_url, "Job:", job.job_id);
-                        console.error("Video element:", e.currentTarget);
-                        console.error("Error details:", e.currentTarget.error);
-                      }}
-                      onLoadedMetadata={(e) => {
-                        // Seek to first frame to make it visible
-                        try {
-                          const video = e.currentTarget;
-                          video.currentTime = 0.1;
-                          // Request a frame update
-                          requestAnimationFrame(() => {
-                            video.currentTime = 0;
-                          });
-                        } catch (err) {
-                          console.error("Error seeking video:", err);
-                        }
-                      }}
-                      onLoadedData={(e) => {
-                        // Ensure first frame is visible by seeking to start
-                        try {
-                          const video = e.currentTarget;
-                          if (video.readyState >= 2 && video.paused) { // HAVE_CURRENT_DATA or higher, only if paused
-                            video.currentTime = 0;
-                          }
-                        } catch (err) {
-                          console.error("Error showing video frame:", err);
-                        }
-                      }}
-                      onCanPlay={(e) => {
-                        // Video is ready to play - seek to first frame to make it visible (only if paused)
-                        try {
-                          const video = e.currentTarget;
-                          if (video.paused && video.currentTime !== 0) {
-                            video.currentTime = 0;
-                          }
-                        } catch (err) {
-                          // Ignore
-                        }
-                      }}
-                    />
-                    
-                    {/* AI Model Label (Bottom Left - shown after video plays) */}
-                    {(job.model_display_name || job.settings?.model_display_name) && (
-                      <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md border border-white/10 text-white text-[9px] font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
-                        {job.model_display_name || job.settings?.model_display_name}
-                      </div>
-                    )}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
 
-                    {/* Download Button (Top Right - Always Visible) */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        forceDownload(job.output_url, `video-${job.job_id.slice(0, 8)}.mp4`);
-                      }}
-                      className="absolute top-2 right-2 bg-black/40 backdrop-blur-md border border-white/10 text-white p-1.5 rounded-lg hover:bg-black/60 hover:border-white/20 transition-all z-20 shadow-lg"
-                      title="Download Video"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                      </svg>
-                    </button>
-                  </>
-                ) : isRunning ? (
-                  <div className="relative w-full h-full overflow-hidden bg-gray-1600/20 flex items-center justify-center">
-                    {/* Grey background with loading percentage */}
-                    <p className="text-sm font-medium text-white">
-                      {Math.round(loadingPercentages[job.job_id] || 0)}%
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-        
-        {/* Fade out overlay similar to ImageGallery */}
-        {jobs.length > 12 && (
-          <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black-1100 via-black-1100/60 to-transparent pointer-events-none"></div>
+            <div className="flex items-center gap-1 px-2">
+              <span className="text-sm font-medium text-white">
+                {currentPage}
+              </span>
+              <span className="text-sm text-white/40 mx-1">/</span>
+              <span className="text-sm text-white/40">
+                {totalPages}
+              </span>
+            </div>
+
+            <button
+              onClick={handleNextPage}
+              disabled={currentPage === totalPages}
+              className={`h-10 w-10 rounded-xl flex items-center justify-center border transition-all duration-200 ${
+                currentPage === totalPages
+                  ? "border-white/5 text-white/20 cursor-not-allowed bg-white/[0.02]"
+                  : "border-white/10 text-white hover:bg-white/10 hover:border-white/20 bg-white/5"
+              }`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </div>
         )}
       </div>
     </section>
@@ -415,13 +453,10 @@ function VideoGalleryInner({ jobs, selectedJobId, loading = false, onSelectJob }
 }
 
 // Memoized export to prevent re-renders when props haven't changed
-// Compare jobs by their serialized key to avoid unnecessary re-renders
 const VideoGallery = memo(VideoGalleryInner, (prevProps, nextProps) => {
-  // Custom comparison to avoid re-renders when jobs data is the same
   if (prevProps.loading !== nextProps.loading) return false;
   if (prevProps.selectedJobId !== nextProps.selectedJobId) return false;
   
-  // Compare jobs by their key data (id, status, output_url)
   if (prevProps.jobs.length !== nextProps.jobs.length) return false;
   
   const prevKey = prevProps.jobs.map(j => `${j.job_id}:${j.status}:${j.output_url || ''}`).join('|');

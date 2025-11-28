@@ -59,7 +59,7 @@ export async function trackInitiateCheckout(options?: {
     if (Object.keys(body).length > 0) {
       await apiClient.post('/billing/track-initiate-checkout', body);
     } else {
-      await apiClient.post('/billing/track-initiate-checkout');
+    await apiClient.post('/billing/track-initiate-checkout');
     }
   } catch (error) {
     // Silently fail - tracking should not block page functionality

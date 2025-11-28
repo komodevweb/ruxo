@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getToken, apiClient } from "@/lib/api";
 import VideoGallery from "@/app/components/VideoGallery";
+import GalleryVideoCard from "@/app/components/GalleryVideoCard";
 import { allImages } from "../../lib/gallery-images";
 
 function Page() {
@@ -531,7 +532,7 @@ function Page() {
 
           try {
                // Don't set loading here - it's already set in useEffect
-               const response = await fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/text-to-video/all-jobs?limit=10`, {
+               const response = await fetch(`${process.env.NEXT_PUBLIC_API_V1_URL}/text-to-video/all-jobs?limit=100`, {
                     headers: {
                          "Authorization": `Bearer ${token}`
                     }
@@ -1624,24 +1625,54 @@ function Page() {
                               </div>
                          </div>
                          {/* Photo Gallery */}
-                         <div className="w-full max-w-[1320px] mx-auto px-5 mt-12">
-                              <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
-                                   {galleryImages.map((img, idx) => (
-                                        <div key={`${img.id}-${idx}`} className={`break-inside-avoid relative group rounded-xl overflow-hidden bg-[#1A1D24] ${img.aspect}`}>
-                                             <img 
-                                                  src={img.src} 
-                                                  alt="" 
-                                                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                                  loading={idx < 4 ? "eager" : "lazy"}
-                                                  decoding="async"
-                                             />
-                                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3">
-                                                  <div className="flex items-center gap-2">
-                                                       <span className="text-[10px] font-medium text-white bg-white/20 backdrop-blur-sm px-2 py-0.5 rounded">VIDEO</span>
+                         <div className="w-full max-w-[1320px] mx-auto px-5 mt-12 pb-20">
+                              {/* Featured Videos */}
+                              <div className="mb-16">
+                                   <div className="flex items-center justify-between mb-6">
+                                        <h3 className="text-xl font-medium text-white flex items-center gap-2">
+                                             Featured Generations
+                                        </h3>
+                                   </div>
+                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        {["/images/upgrade/1128_1.mp4?v=1", "/images/upgrade/1128_2.mp4?v=1", "/images/upgrade/1128_3.mp4?v=1", "/images/upgrade/1128_4.mp4?v=1"].map((src, i) => (
+                                             <GalleryVideoCard key={i} src={src} aspectRatio="aspect-[9/16]" />
+                                        ))}
+                                   </div>
+                              </div>
+
+                              {/* Community Showcase */}
+                              <div>
+                                   <div className="flex items-center justify-between mb-6">
+                                        <h3 className="text-xl font-medium text-white flex items-center gap-2">
+                                             Community Showcase
+                                        </h3>
+                                   </div>
+                                   <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
+                                        {galleryImages.map((img, idx) => (
+                                             <div key={`${img.id}-${idx}`} className={`break-inside-avoid relative group rounded-2xl overflow-hidden bg-[#1A1D24] border border-white/5 ${img.aspect} hover:border-white/20 transition-colors duration-300`}>
+                                                  <img 
+                                                       src={img.src} 
+                                                       alt="" 
+                                                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                                       loading={idx < 4 ? "eager" : "lazy"}
+                                                       decoding="async"
+                                                  />
+                                                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
+                                                       <div className="w-full">
+                                                            <div className="flex items-center justify-between">
+                                                                 <span className="text-[10px] font-medium text-white/90 bg-white/10 backdrop-blur-md border border-white/10 px-2.5 py-1 rounded-full">Remix</span>
+                                                                 <div className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center transform translate-y-2 group-hover:translate-y-0 opacity-0 group-hover:opacity-100 transition-all duration-300 delay-75">
+                                                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                      </svg>
+                                                                 </div>
+                                                            </div>
+                                                       </div>
                                                   </div>
                                              </div>
-                                        </div>
-                                   ))}
+                                        ))}
+                                   </div>
                               </div>
                          </div>
                               </>

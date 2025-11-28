@@ -553,15 +553,15 @@ class BillingService:
                 if not existing_customer.metadata.get("user_id"):
                     stripe.Customer.modify(
                         existing_customer.id,
-                        metadata={"user_id": str(user.id)}
-                    )
+                    metadata={"user_id": str(user.id)}
+                )
                     logger.info(f"Updated customer {existing_customer.id} with user_id metadata")
                 
                 # If we had a stale subscription record, update it
                 if existing_sub:
                     existing_sub.stripe_customer_id = existing_customer.id
-                    self.session.add(existing_sub)
-                    await self.session.commit()
+                self.session.add(existing_sub)
+                await self.session.commit()
                 
                 return existing_customer.id
         except stripe.error.StripeError as e:
