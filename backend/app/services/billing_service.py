@@ -560,8 +560,8 @@ class BillingService:
                 # If we had a stale subscription record, update it
                 if existing_sub:
                     existing_sub.stripe_customer_id = existing_customer.id
-                self.session.add(existing_sub)
-                await self.session.commit()
+                    self.session.add(existing_sub)
+                    await self.session.commit()
                 
                 return existing_customer.id
         except stripe.error.StripeError as e:
