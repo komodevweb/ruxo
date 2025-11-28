@@ -440,7 +440,7 @@ function page() {
      };
      
      // Synchronous version for immediate display (uses ref cache to avoid re-renders)
-     const getRequiredCreditsSync = (sizeValue: string, durationValue: number): number => {
+     const getRequiredCreditsSync = (sizeValue: string, durationValue: number): number | undefined => {
           if (!selectedModel) {
                return 0;
           }
@@ -449,7 +449,7 @@ function page() {
           const cacheKey = `${modelId}-${sizeValue}-${durationValue}`;
           
           // Use ref for synchronous access (doesn't cause re-render)
-          return creditCacheRef.current.get(cacheKey) || creditCache.get(cacheKey) || 0;
+          return creditCacheRef.current.get(cacheKey) ?? creditCache.get(cacheKey);
      };
 
      // Handle upgrade - redirect to pricing page
@@ -470,7 +470,8 @@ function page() {
           if (!user) return { text: "Generate", action: () => router.push("/signup") };
           
           const hasSubscription = !!user.plan_name;
-          const requiredCredits = getRequiredCreditsSync(size, duration);
+          const creditsValue = getRequiredCreditsSync(size, duration);
+          const requiredCredits = creditsValue ?? 0; // Fallback for logic
           const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
           
           if (!hasSubscription) {
@@ -482,7 +483,7 @@ function page() {
           }
           
           return { 
-               text: `Generate (${requiredCredits})`, 
+               text: creditsValue !== undefined ? `Generate (${creditsValue})` : "Generate (...)", 
                action: handleGenerate 
           };
      };
@@ -1052,7 +1053,9 @@ function page() {
           `}
                                                   >
                                                        <span>{opt.label}</span>
-                                                       <span className="text-white/60">({credits})</span>
+                                                       <span className="text-white/60">
+                                                            {credits !== undefined ? `(${credits})` : <span className="animate-pulse">...</span>}
+                                                       </span>
                                                   </button>
                                              );
                                         })}

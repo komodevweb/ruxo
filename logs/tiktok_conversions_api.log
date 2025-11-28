@@ -21899,3 +21899,82 @@
 }
 2025-11-28 03:58:18 - INFO - ====================================================================================================
 2025-11-28 03:58:18 - INFO - 
+2025-11-28 04:04:23 - INFO - ====================================================================================================
+2025-11-28 04:04:23 - INFO - 📤 OUTGOING REQUEST - ViewContent Event
+2025-11-28 04:04:23 - INFO - URL: https://business-api.tiktok.com/open_api/v1.3/event/track/
+2025-11-28 04:04:23 - INFO - HTTP Method: POST
+2025-11-28 04:04:23 - INFO - Request Payload:
+2025-11-28 04:04:23 - INFO - {
+  "event_source": "web",
+  "event_source_id": "D4JVLBBC77U4IAHDMKB0",
+  "data": [
+    {
+      "event": "ViewContent",
+      "event_time": 1764295463,
+      "user": {
+        "ttp": "01KB437WD290QM7EKP7W0KDM0C_.tt.1",
+        "ip": "2605:8d80:6c26:30ed:c5bb:58fb:3973:b63d",
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0"
+      },
+      "properties": {
+        "page_url": "https://ruxo.ai/signup"
+      }
+    }
+  ]
+}
+2025-11-28 04:04:23 - INFO - ====================================================================================================
+2025-11-28 04:04:24 - INFO - ====================================================================================================
+2025-11-28 04:04:24 - INFO - 📥 INCOMING RESPONSE - ViewContent Event
+2025-11-28 04:04:24 - INFO - HTTP Status Code: 200
+2025-11-28 04:04:24 - INFO - Response Headers: {'server': 'nginx', 'content-type': 'application/json', 'content-length': '92', 'x-tt-logid': '202511280204232BD8DB25BA649B602C5E', 'access-control-expose-headers': 'x-tt-traceflag,x-tt-logid', 'x-tt-trace-host': '01997c9f5678a17059e655253c56f7a3c2d693f8070fb0e49c78987ef21c42e8fb7af8a05ee93e28ff84f6e7908748fb37a8afcd1f3df9edff54741f874085a91a98cbc28d59574ded0ab9b97c7dc31cdfb665a0c8b98b09d8bf3bdd88a62e46500ede1642aaedf3c11b7ea6dbb42ff186', 'x-tt-trace-id': '00-2511280204232BD8DB25BA649B602C5E-05DD5A0AC460133A-00', 'x-origin-response-time': '41,23.213.246.236', 'x-akamai-request-id': '2199b904.3292dc4c', 'expires': 'Fri, 28 Nov 2025 02:04:24 GMT', 'cache-control': 'max-age=0, no-cache, no-store', 'pragma': 'no-cache', 'date': 'Fri, 28 Nov 2025 02:04:24 GMT', 'x-cache': 'TCP_MISS from a23-192-164-148.deploy.akamaitechnologies.com (AkamaiGHost/22.3.2.1-992afe98b9405e84f19be223dce3e955) (-)', 'connection': 'keep-alive', 'x-cache-remote': 'TCP_MISS from a23-213-246-236.deploy.akamaitechnologies.com (AkamaiGHost/22.3.2.1-992afe98b9405e84f19be223dce3e955) (-)', 'x-tt-trace-tag': 'id=16;cdn-cache=miss;type=dyn', 'server-timing': 'cdn-cache; desc=MISS, edge; dur=36, origin; dur=41, inner; dur=29', 'x-parent-response-time': '70,23.192.164.148'}
+2025-11-28 04:04:24 - INFO - Response Body:
+2025-11-28 04:04:24 - INFO - {
+  "code": 0,
+  "message": "OK",
+  "request_id": "202511280204232BD8DB25BA649B602C5E",
+  "data": {}
+}
+2025-11-28 04:04:24 - INFO - ====================================================================================================
+2025-11-28 04:04:24 - INFO - 
+2025-11-28 04:04:36 - INFO - ====================================================================================================
+2025-11-28 04:04:36 - INFO - 📤 OUTGOING REQUEST - CompleteRegistration Event
+2025-11-28 04:04:36 - INFO - URL: https://business-api.tiktok.com/open_api/v1.3/event/track/
+2025-11-28 04:04:36 - INFO - HTTP Method: POST
+2025-11-28 04:04:36 - INFO - Request Payload:
+2025-11-28 04:04:36 - INFO - {
+  "event_source": "web",
+  "event_source_id": "D4JVLBBC77U4IAHDMKB0",
+  "data": [
+    {
+      "event": "CompleteRegistration",
+      "event_time": 1764295476,
+      "user": {
+        "email": "dc3fd308d31e568f381120624366a45985b4fae13f65984bf6eb90a02655bd35",
+        "first_name": "e73b48f750be953532c1d1757b5ba081e8a6b0408ea8b4e65ef1e65631a7da06",
+        "last_name": "f35da74a876a02769632176289040b6b8685de85f8bcf4daa9c6ed8bd989f01b",
+        "external_id": "49961f32-c15b-43c4-a9b7-8b77f6ea13a3",
+        "ttp": "01KB437WD290QM7EKP7W0KDM0C_.tt.1",
+        "ip": "2605:8d80:6c26:30ed:c5bb:58fb:3973:b63d",
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0"
+      },
+      "properties": {
+        "page_url": "https://ruxo.ai/"
+      },
+      "event_id": "registration_49961f32-c15b-43c4-a9b7-8b77f6ea13a3_1764295476"
+    }
+  ]
+}
+2025-11-28 04:04:36 - INFO - ====================================================================================================
+2025-11-28 04:04:37 - INFO - ====================================================================================================
+2025-11-28 04:04:37 - INFO - 📥 INCOMING RESPONSE - CompleteRegistration Event
+2025-11-28 04:04:37 - INFO - HTTP Status Code: 200
+2025-11-28 04:04:37 - INFO - Response Headers: {'server': 'nginx', 'content-type': 'application/json', 'content-length': '92', 'x-tt-logid': '20251128020437B7445953C9422E51560C', 'access-control-expose-headers': 'x-tt-traceflag,x-tt-logid', 'server-timing': 'inner; dur=30, cdn-cache; desc=MISS, edge; dur=5, origin; dur=52', 'x-tt-trace-host': '01997c9f5678a17059e655253c56f7a3c2351b4a4000c5c7023353fab1d5fe5bc31e1b4e90d2b0bffe3d7f99ac36e0f9a43258e793fbd83eb9693781b27f2d2db764a43aa10802addc7348e0452637982a93002ba87b553366409e4f9d0f4aba4e', 'x-tt-trace-id': '00-251128020437B7445953C9422E51560C-59DE2B21F4D869C1-00', 'expires': 'Fri, 28 Nov 2025 02:04:37 GMT', 'cache-control': 'max-age=0, no-cache, no-store', 'pragma': 'no-cache', 'date': 'Fri, 28 Nov 2025 02:04:37 GMT', 'x-cache': 'TCP_MISS from a23-33-30-88.deploy.akamaitechnologies.com (AkamaiGHost/22.3.2.1-992afe98b9405e84f19be223dce3e955) (-)', 'connection': 'keep-alive', 'x-tt-trace-tag': 'id=16;cdn-cache=miss;type=dyn', 'x-origin-response-time': '52,23.33.30.88', 'x-akamai-request-id': 'c3232d77'}
+2025-11-28 04:04:37 - INFO - Response Body:
+2025-11-28 04:04:37 - INFO - {
+  "code": 0,
+  "message": "OK",
+  "request_id": "20251128020437B7445953C9422E51560C",
+  "data": {}
+}
+2025-11-28 04:04:37 - INFO - ====================================================================================================
+2025-11-28 04:04:37 - INFO - 
