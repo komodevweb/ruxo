@@ -24,11 +24,18 @@ const VideoCard = memo(({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [aspectRatioStyle, setAspectRatioStyle] = useState<any>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const hasOutput = !!job.output_url;
   const isRunning = (job.status === "pending" || job.status === "running") && !hasOutput;
 
   // Determine initial style from metadata
   useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+
     const getInitialStyle = () => {
       // 1. Check explicit aspect_ratio field (e.g., "9:16")
       if (job.aspect_ratio && typeof job.aspect_ratio === 'string') {
@@ -64,6 +71,8 @@ const VideoCard = memo(({
     };
     
     setAspectRatioStyle(getInitialStyle());
+
+    return () => window.removeEventListener('resize', checkMobile);
   }, [job]);
 
   const forceDownload = async (url: string, filename: string) => {
@@ -157,6 +166,13 @@ const VideoCard = memo(({
               }
             }}
           />
+          
+          {/* Video Preview Overlay on Mobile */}
+          {isMobile && !isPlaying && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity duration-300 opacity-100 pointer-events-none">
+              {/* Video image is visible via the video element itself paused at 0.1s */}
+            </div>
+          )}
           
           {/* Model Badge - Always visible (non-intrusive) */}
           {(job.model_display_name || job.settings?.model_display_name) && (

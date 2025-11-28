@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 
 interface GalleryVideoCardProps {
   src: string;
@@ -13,11 +13,18 @@ const GalleryVideoCard = ({
   className = "" 
 }: GalleryVideoCardProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isHovered, setIsHovered] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const handleMouseEnter = () => {
-    setIsHovered(true);
-    if (videoRef.current) {
+    if (!isMobile && videoRef.current) {
       videoRef.current.muted = false;
       videoRef.current.play().catch(e => {
         // Autoplay with sound might fail due to browser policy
@@ -31,11 +38,22 @@ const GalleryVideoCard = ({
   };
 
   const handleMouseLeave = () => {
-    setIsHovered(false);
-    if (videoRef.current) {
+    if (!isMobile && videoRef.current) {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
       videoRef.current.muted = true;
+    }
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (isMobile && videoRef.current) {
+      e.stopPropagation();
+      if (videoRef.current.paused) {
+        videoRef.current.muted = false;
+        videoRef.current.play().catch(console.error);
+      } else {
+        videoRef.current.pause();
+      }
     }
   };
 
@@ -44,6 +62,7 @@ const GalleryVideoCard = ({
       className={`relative rounded-2xl overflow-hidden bg-[#1A1D24] border border-white/10 cursor-pointer group ${aspectRatio} ${className}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onClick={handleClick}
     >
       <video 
         ref={videoRef}
@@ -52,19 +71,24 @@ const GalleryVideoCard = ({
         loop
         muted
         playsInline
+        preload="metadata"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onLoadedMetadata={(e) => {
+             e.currentTarget.currentTime = 0.1;
+        }}
       />
       
-      {/* Default Overlay (Play Icon) */}
-      <div className={`absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity duration-300 ${isHovered ? 'opacity-0' : 'opacity-100'}`}>
-        <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-           <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-             <path d="M8 5v14l11-7z" />
-           </svg>
-        </div>
+      {/* Play Icon Overlay */}
+      <div className={`absolute inset-0 flex items-center justify-center pointer-events-none bg-black/20 transition-all duration-300 ${isPlaying ? 'opacity-0' : 'opacity-100'} ${!isMobile ? 'group-hover:opacity-0' : ''}`}>
+        <svg className="w-10 h-10 md:w-12 md:h-12 text-white/80 drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
+           <path d="M8 5v14l11-7z" />
+        </svg>
       </div>
 
-      {/* Hover Overlay (Sound Icon + Gradient) */}
-      <div className={`absolute inset-0 pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
+      {/* Sound Icon (Desktop only, on hover) */}
+      {!isMobile && (
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent transition-opacity duration-300 opacity-0 group-hover:opacity-100">
         <div className="absolute bottom-3 right-3">
           <div className="p-2 rounded-full bg-black/40 backdrop-blur-md border border-white/10">
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -73,9 +97,9 @@ const GalleryVideoCard = ({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };
 
 export default GalleryVideoCard;
-
