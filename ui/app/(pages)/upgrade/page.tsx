@@ -471,7 +471,7 @@ function page() {
                <section id="upgrade" className="w-full font-inter bg-black-1100 md:pt-[160px] pt-[110px]  py-20">
                     <div className="w-full max-w-[1400px] px-5 mx-auto">
                          <div className="text-center mb-12">
-                              <h2 className="md:text-[48px] text-[32px] mb-3 text-white font-medium leading-[120%] tracking-[-1px]">All the best AI models in one place</h2>
+                              <h2 className="md:text-[48px] text-[32px] mb-3 text-white font-medium leading-[120%] tracking-[-1px]">ALL THE BEST AI MODELS IN ONE PLACE</h2>
                               <p className="text-base font-normal leading-5 text-white/60 tracking-[-0.32px] max-w-2xl mx-auto mb-6">
                                    Access Sora, Veo, Kling, Flux and 15+ premium AI models with a single subscription.
                               </p>
