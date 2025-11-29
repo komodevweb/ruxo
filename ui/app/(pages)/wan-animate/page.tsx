@@ -90,6 +90,18 @@ function page() {
      const options = ["480p", "720p"]; // Only 480p and 720p supported by WaveSpeed
      const [sidebarOpen, setSidebarOpen] = useState(false);
 
+     // Lock body scroll when sidebar is open on mobile
+     useEffect(() => {
+          if (sidebarOpen) {
+               document.body.style.overflow = 'hidden';
+          } else {
+               document.body.style.overflow = '';
+          }
+          return () => {
+               document.body.style.overflow = '';
+          };
+     }, [sidebarOpen]);
+
      const [creditCache, setCreditCache] = useState<Map<string, number>>(new Map());
      
      // Fetch required credits from backend
@@ -837,16 +849,16 @@ function page() {
                <section className="">
                     <div className={`fixed z-[999] 
     ${sidebarOpen ? "left-0" : "-left-full"} 
-    lg:left-0 lg:top-[72px] top-0 lg:w-[301px] w-full flex flex-col justify-between 
-    lg:h-[calc(100vh_-_72px)] h-screen lg:bottom-auto bottom-0 
-    border-r border-gray-1300 lg:py-8 pt-[68px] px-4 sidebar-bg
+    md:left-0 md:top-[72px] top-0 md:w-[301px] w-full flex flex-col justify-between 
+    md:h-[calc(100vh_-_72px)] h-screen md:bottom-auto bottom-0 
+    border-r border-gray-1300 md:py-8 pt-[120px] px-4 sidebar-bg
     transition-all duration-300 overflow-y-auto scroll-smooth
-    lg:pb-8 pb-20
+    md:pb-8 pb-20
    `} style={{ paddingBottom: 'max(5rem, calc(1rem + env(safe-area-inset-bottom, 0px)))' }}>
                          {/* Mobile-only close button */}
                          <button
                               onClick={() => setSidebarOpen(false)}
-                              className="lg:hidden absolute top-[60px] right-4 w-8 h-8 flex items-center justify-center text-white/80 hover:text-white transition-colors z-[1001]"
+                              className="md:hidden absolute top-[90px] right-4 w-8 h-8 flex items-center justify-center text-white/80 hover:text-white transition-colors z-[1001]"
                               aria-label="Close sidebar"
                          >
                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1089,11 +1101,11 @@ function page() {
                               })()}
                          </div>
                     </div>
-                                   <div className={`lg:w-[calc(100%_-_301px)] px-5 flex flex-col ml-auto ${
-                                        !loadingJobs && previousJobs.length > 0
-                                             ? "items-start justify-start pt-[72px] pb-10 min-h-screen" 
-                                             : "items-center justify-center flex-col md:pt-[160px] pt-[110px] py-20 min-h-screen"
-                                   }`}>
+                    <div className={`md:w-[calc(100%_-_301px)] px-5 flex flex-col ml-auto ${
+                                       !loadingJobs && previousJobs.length > 0
+                                            ? "items-start justify-start pt-[72px] pb-10 min-h-screen" 
+                                            : "items-center justify-center flex-col md:pt-[160px] pt-[110px] py-20 min-h-screen"
+                                  }`}>
                                         {loadingJobs || !hasLoadedOnce || authLoading ? (
                                              <div className="w-full max-w-[1320px] mx-auto">
                                                   <VideoGallery 
@@ -1109,7 +1121,7 @@ function page() {
                                              // Show video gallery
                                              <div className="w-full max-w-[1320px] mx-auto">
                                                   {/* Mobile-only Generate button */}
-                                                  <div className="lg:hidden block mb-6 px-5">
+                                                  <div className="md:hidden block mb-6 px-5">
                                                        <div className="text-center mb-6">
                                                             <div className="flex gap-2 items-center justify-center mb-2">
                                                                  <span className="text-[10px] font-medium text-black inline-block py-0.5 px-[7px] bg-blue-1000 rounded-xl">NEW</span>
@@ -1147,8 +1159,8 @@ function page() {
                                         </div>
                                         <h2 className="md:text-5xl text-[38px] font-medium text-white leading-[120%] my-4 tracking-[-1px]">Turn Any Image Into Motion</h2>
                                         <p className="md:text-base text-sm font-medium leading-[120%] text-white/60">Turn text, images, or videos into high-impact creative assets powered by the latest AI models.</p>
-                                        <div className="lg:hidden block mt-12">
-                                             <button 
+                                        <div className="md:hidden block mt-12">
+                                             <button  
                                                   onClick={() => setSidebarOpen(true)} 
                                                   className="md:text-sm text-xs w-full text-center font-bold leading-[120%] text-black inline-block py-[11.5px] px-3.5 shadow-3xl bg1 rounded-xl hover:shadow-7xl transition-all duration-300" 
                                              >
