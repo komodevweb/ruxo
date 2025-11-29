@@ -17,6 +17,8 @@ class UserProfile(SQLModel, table=True):
     signup_user_agent: Optional[str] = None
     signup_fbp: Optional[str] = None  # Facebook browser ID cookie
     signup_fbc: Optional[str] = None  # Facebook click ID cookie
+    signup_ttp: Optional[str] = None  # TikTok Pixel cookie
+    signup_ttclid: Optional[str] = None  # TikTok Click ID cookie
     
     # Last checkout tracking context (for Purchase event attribution)
     # These are updated every time user initiates checkout, so we have fresh data for webhooks
@@ -24,6 +26,8 @@ class UserProfile(SQLModel, table=True):
     last_checkout_user_agent: Optional[str] = None
     last_checkout_fbp: Optional[str] = None
     last_checkout_fbc: Optional[str] = None
+    last_checkout_ttp: Optional[str] = None
+    last_checkout_ttclid: Optional[str] = None
     last_checkout_timestamp: Optional[datetime] = None
     
     created_at: datetime = Field(

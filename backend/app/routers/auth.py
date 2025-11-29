@@ -132,6 +132,8 @@ async def signup(
                     signup_user_agent=client_user_agent,
                     signup_fbp=fbp,
                     signup_fbc=fbc,
+                    signup_ttp=ttp,
+                    signup_ttclid=ttclid,
                 )
                 session.add(user_profile)
                 await session.commit()
@@ -142,6 +144,8 @@ async def signup(
                 user_profile.signup_user_agent = client_user_agent
                 user_profile.signup_fbp = fbp
                 user_profile.signup_fbc = fbc
+                user_profile.signup_ttp = ttp
+                user_profile.signup_ttclid = ttclid
                 session.add(user_profile)
                 await session.commit()
             
@@ -324,7 +328,8 @@ async def signup(
             
             # TikTok tracking
             ttp = http_request.cookies.get("_ttp") if http_request else None
-            ttclid = http_request.cookies.get("_ttclid") if http_request else None
+            # _ttclid is the cookie name, but we should also check ttclid
+            ttclid = http_request.cookies.get("_ttclid") or http_request.cookies.get("ttclid") if http_request else None
             asyncio.create_task(tiktok_service.track_complete_registration(
                 email=user_profile.email,
                 first_name=first_name,
@@ -1228,6 +1233,8 @@ async def oauth_complete_registration(
             current_user.signup_user_agent = client_user_agent
             current_user.signup_fbp = fbp
             current_user.signup_fbc = fbc
+            current_user.signup_ttp = ttp
+            current_user.signup_ttclid = ttclid
             session.add(current_user)
             await session.commit()
         
@@ -1254,7 +1261,7 @@ async def oauth_complete_registration(
         ttclid = None
         if http_request:
             ttp = http_request.cookies.get("_ttp")
-            ttclid = http_request.cookies.get("_ttclid")
+            ttclid = http_request.cookies.get("_ttclid") or http_request.cookies.get("ttclid")
         if tracking_data:
             if hasattr(tracking_data, 'ttp') and tracking_data.ttp:
                 ttp = tracking_data.ttp

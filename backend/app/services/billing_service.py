@@ -54,6 +54,8 @@ class BillingService:
             metadata["ttp"] = ttp
         if ttclid:
             metadata["ttclid"] = ttclid
+            # Also add click_id alias
+            metadata["click_id"] = ttclid
         
         # Add any extra metadata (e.g., is_upgrade, existing_subscription_id)
         metadata.update(extra_metadata)
@@ -1806,11 +1808,21 @@ class BillingService:
                     fbc=fbc,
                     event_source_url=f"{settings.FRONTEND_URL}/upgrade",
                     event_id=event_id,
-                    content_name=plan.name,
+                    content_name=f"{plan.name} (Trial)",
                     content_ids=[str(plan.id)]
                 ))
                 
                 # TikTok StartTrial (for trial start)
+                # Get tracking from user profile as fallback if not in context
+                if not ttp and user.signup_ttp:
+                    ttp = user.signup_ttp
+                if not ttclid and user.signup_ttclid:
+                    ttclid = user.signup_ttclid
+                if not ttp and user.last_checkout_ttp:
+                    ttp = user.last_checkout_ttp
+                if not ttclid and user.last_checkout_ttclid:
+                    ttclid = user.last_checkout_ttclid
+                    
                 asyncio.create_task(tt_service.track_start_trial(
                     value=value,
                     currency=currency,

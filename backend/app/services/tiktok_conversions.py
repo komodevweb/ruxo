@@ -99,13 +99,21 @@ class TikTokConversionsService:
         if ttp:
             user_data["ttp"] = ttp
         if ttclid:
+            # TikTok expects 'ttclid' in the 'context' object, but for S2S events 
+            # it can also be passed in 'user' object or 'properties' depending on documentation versions.
+            # Current docs suggest ttclid is a click_id and should be at event root or properties.
+            # However, standard practice for S2S is often in context or properties. 
+            # Let's add it to 'user' object as 'ttclid' (as per our implementation)
+            # AND also add it as 'click_id' which is a common alias.
             user_data["ttclid"] = ttclid
+            user_data["click_id"] = ttclid
         
         return user_data
     
     def _get_context(self, client_ip: Optional[str] = None,
                     client_user_agent: Optional[str] = None,
-                    event_source_url: Optional[str] = None) -> Dict[str, Any]:
+                    event_source_url: Optional[str] = None,
+                    ttclid: Optional[str] = None) -> Dict[str, Any]:
         """Build context object for TikTok Events API."""
         context = {}
         
@@ -115,6 +123,10 @@ class TikTokConversionsService:
             context["user_agent"] = client_user_agent
         if event_source_url:
             context["page"] = {"url": event_source_url}
+        if ttclid:
+            context["ttclid"] = ttclid
+            # Some docs suggest click_id in context too
+            context["click_id"] = ttclid
         
         return context
     
@@ -204,6 +216,11 @@ class TikTokConversionsService:
                 if context.get("user_agent"):
                     merged_user["user_agent"] = context["user_agent"]
             
+            # TikTok cookies for better attribution
+            if context.get("ttclid"):
+                 merged_user["ttclid"] = context["ttclid"]
+                 merged_user["click_id"] = context["ttclid"]  # Alias for better compatibility
+            
             # Build the event object
             event = {
                 "event": event_name,
@@ -216,6 +233,13 @@ class TikTokConversionsService:
                 if properties is None:
                     properties = {}
                 properties["page_url"] = context["page"]["url"]
+
+            # Add click_id to context if available (for some implementations)
+            if context.get("ttclid"):
+                if properties is None:
+                    properties = {}
+                # Add click_id to properties as well, just in case
+                properties["click_id"] = context["ttclid"]
             
             # Add properties if provided
             if properties:
@@ -401,6 +425,7 @@ class TikTokConversionsService:
             client_ip=client_ip,
             client_user_agent=client_user_agent,
             event_source_url=event_source_url,
+            ttclid=ttclid,
         )
         
         return await self.send_event(
@@ -443,6 +468,7 @@ class TikTokConversionsService:
             client_ip=client_ip,
             client_user_agent=client_user_agent,
             event_source_url=event_source_url,
+            ttclid=ttclid,
         )
         
         # Build properties if value is provided
@@ -504,6 +530,7 @@ class TikTokConversionsService:
             client_ip=client_ip,
             client_user_agent=client_user_agent,
             event_source_url=event_source_url,
+            ttclid=ttclid,
         )
         
         properties = self._get_properties(
@@ -541,6 +568,7 @@ class TikTokConversionsService:
             client_ip=client_ip,
             client_user_agent=client_user_agent,
             event_source_url=event_source_url,
+            ttclid=ttclid,
         )
         
         return await self.send_event(
@@ -594,6 +622,7 @@ class TikTokConversionsService:
             client_ip=client_ip,
             client_user_agent=client_user_agent,
             event_source_url=event_source_url,
+            ttclid=ttclid,
         )
         
         properties = self._get_properties(
@@ -654,6 +683,7 @@ class TikTokConversionsService:
             client_ip=client_ip,
             client_user_agent=client_user_agent,
             event_source_url=event_source_url,
+            ttclid=ttclid,
         )
         
         properties = self._get_properties(
