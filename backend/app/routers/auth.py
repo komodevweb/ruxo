@@ -300,9 +300,15 @@ async def signup(
             # Get client IP and user agent from HTTP request
             client_ip = get_client_ip(http_request)
             client_user_agent = http_request.headers.get("user-agent") if http_request else None
-            # Get Facebook cookies if available
-            fbp = http_request.cookies.get("_fbp") if http_request else None
-            fbc = http_request.cookies.get("_fbc") if http_request else None
+            
+            # Get Facebook cookies (prefer request body for cross-domain support)
+            fbp = signup_request.fbp
+            if not fbp and http_request:
+                fbp = http_request.cookies.get("_fbp")
+                
+            fbc = signup_request.fbc
+            if not fbc and http_request:
+                fbc = http_request.cookies.get("_fbc")
             
             # Track registration (fire and forget - don't block response)
             import asyncio
@@ -327,9 +333,15 @@ async def signup(
             ))
             
             # TikTok tracking
-            ttp = http_request.cookies.get("_ttp") if http_request else None
-            # _ttclid is the cookie name, but we should also check ttclid
-            ttclid = http_request.cookies.get("_ttclid") or http_request.cookies.get("ttclid") if http_request else None
+            # Prefer request body for cross-domain support
+            ttp = signup_request.ttp
+            if not ttp and http_request:
+                ttp = http_request.cookies.get("_ttp")
+            
+            ttclid = signup_request.ttclid
+            if not ttclid and http_request:
+                ttclid = http_request.cookies.get("_ttclid") or http_request.cookies.get("ttclid")
+                
             asyncio.create_task(tiktok_service.track_complete_registration(
                 email=user_profile.email,
                 first_name=first_name,
@@ -918,6 +930,9 @@ async def oauth_exchange(
     Creates user profile if new, or logs in existing user.
     Returns token that frontend can use to set cookie.
     """
+    # Use the dedicated Facebook logger for visibility in facebook_conversions_api.log
+    fb_logger = logging.getLogger("facebook_conversions_api")
+    
     try:
         # Exchange code for session using Supabase API
         import httpx
@@ -1004,6 +1019,7 @@ async def oauth_exchange(
                         # NEW USER: Create new user profile
                         is_new_user = True
                         logger.info(f"🆕 [OAUTH EXCHANGE] NEW USER detected: {email} (ID: {user_id})")
+                        fb_logger.info(f"🆕 [OAUTH EXCHANGE] NEW USER detected: {email} (ID: {user_id}) - will return new_user=True")
                         
                         # Create new user profile in our database
                         display_name = user_data.get("user_metadata", {}).get("full_name") or \
@@ -1042,6 +1058,7 @@ async def oauth_exchange(
                 # Existing user by ID - regular login, no CompleteRegistration needed
                 logger.info(f"👤 [OAUTH EXCHANGE] EXISTING USER login: {email} (ID: {user_id})")
                 logger.info(f"ℹ️  [OAUTH EXCHANGE] CompleteRegistration NOT fired - user already exists")
+                fb_logger.info(f"👤 [OAUTH EXCHANGE] EXISTING USER login: {email} (ID: {user_id}) - return new_user=False")
                 
                 if email and user_profile.email != email:
                     user_profile.email = email
@@ -1158,9 +1175,14 @@ async def oauth_complete_registration(
         import asyncio
         import time
         
+        # Use the dedicated Facebook logger for visibility in facebook_conversions_api.log
+        fb_logger = logging.getLogger("facebook_conversions_api")
+        
         # Check if user is new and needs CompleteRegistration tracking
         # Criteria: created within last 5 minutes AND signup_ip not set (hasn't been tracked yet)
         is_new_user = False
+        time_info = "N/A"
+        
         if current_user.created_at:
             # Use timezone-aware datetime for comparison
             from datetime import timezone
@@ -1172,14 +1194,31 @@ async def oauth_complete_registration(
                 created_at = created_at.replace(tzinfo=timezone.utc)
             
             time_since_creation = now_utc - created_at
-            is_recently_created = time_since_creation.total_seconds() < 300  # 5 minutes
+            seconds_since_creation = time_since_creation.total_seconds()
+            
+            # Allow up to 1 hour (3600s) to account for slow user flow or clock skew
+            # Originally was 5 mins (300s) which might be too tight
+            is_recently_created = seconds_since_creation < 3600
+            
             has_no_tracking = not (hasattr(current_user, 'signup_ip') and current_user.signup_ip)
             is_new_user = is_recently_created and has_no_tracking
             
-            logger.info(f"📊 [OAUTH COMPLETE-REGISTRATION] User check: created={current_user.created_at}, age={time_since_creation.total_seconds():.0f}s, has_tracking={not has_no_tracking}")
+            time_info = f"created_at={created_at}, now={now_utc}, diff={seconds_since_creation:.0f}s"
+            
+            fb_logger.info(f"📊 [OAUTH COMPLETE-REGISTRATION] User check: {current_user.email}, is_new={is_new_user}, recently_created={is_recently_created}, no_tracking={has_no_tracking}, {time_info}")
         
         if not is_new_user:
+            # Fallback: If signup_ip is NULL, we should probably track it anyway if it's reasonably recent (e.g. < 24 hours)
+            # This catches cases where the user registered hours ago but never completed the flow or tracking failed
+            if current_user.created_at and hasattr(current_user, 'signup_ip') and not current_user.signup_ip:
+                 # Re-calculate time since creation
+                 if 'seconds_since_creation' in locals() and seconds_since_creation < 86400: # 24 hours
+                     is_new_user = True
+                     fb_logger.info(f"⚠️ [OAUTH COMPLETE-REGISTRATION] User {current_user.email} is older than 1h but has NO tracking data (signup_ip=None). Forcing tracking. Age: {seconds_since_creation:.0f}s")
+
+        if not is_new_user:
             logger.info(f"ℹ️  [OAUTH COMPLETE-REGISTRATION] Skipping - user is not new: {current_user.email}")
+            fb_logger.info(f"ℹ️  [OAUTH COMPLETE-REGISTRATION] Skipping - user is not new: {current_user.email} ({time_info})")
             return {"status": "skipped", "message": "User is not new", "event_fired": False}
         
         conversions_service = FacebookConversionsService()
@@ -1215,6 +1254,7 @@ async def oauth_complete_registration(
         
         # Use tracking_data from request body (preferred - works cross-domain)
         if tracking_data:
+            logger.info(f"📊 [OAUTH COMPLETE-REGISTRATION] Received tracking_data: ttp={'✓' if tracking_data.ttp else '✗'}, ttclid={'✓' if tracking_data.ttclid else '✗'}, fbp={'✓' if tracking_data.fbp else '✗'}")
             if tracking_data.fbp:
                 fbp = tracking_data.fbp
             if tracking_data.fbc:
@@ -1233,6 +1273,19 @@ async def oauth_complete_registration(
             current_user.signup_user_agent = client_user_agent
             current_user.signup_fbp = fbp
             current_user.signup_fbc = fbc
+            
+            # Define TikTok variables before usage
+            ttp = None
+            ttclid = None
+            if http_request:
+                ttp = http_request.cookies.get("_ttp")
+                ttclid = http_request.cookies.get("_ttclid") or http_request.cookies.get("ttclid")
+            if tracking_data:
+                if hasattr(tracking_data, 'ttp') and tracking_data.ttp:
+                    ttp = tracking_data.ttp
+                if hasattr(tracking_data, 'ttclid') and tracking_data.ttclid:
+                    ttclid = tracking_data.ttclid
+            
             current_user.signup_ttp = ttp
             current_user.signup_ttclid = ttclid
             session.add(current_user)
@@ -1256,17 +1309,7 @@ async def oauth_complete_registration(
             event_id=event_id,
         ))
         
-        # TikTok tracking
-        ttp = None
-        ttclid = None
-        if http_request:
-            ttp = http_request.cookies.get("_ttp")
-            ttclid = http_request.cookies.get("_ttclid") or http_request.cookies.get("ttclid")
-        if tracking_data:
-            if hasattr(tracking_data, 'ttp') and tracking_data.ttp:
-                ttp = tracking_data.ttp
-            if hasattr(tracking_data, 'ttclid') and tracking_data.ttclid:
-                ttclid = tracking_data.ttclid
+        # TikTok tracking (using the variables defined above)
         asyncio.create_task(tiktok_service.track_complete_registration(
             email=current_user.email,
             first_name=first_name,

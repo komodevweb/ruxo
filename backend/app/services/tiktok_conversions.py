@@ -438,6 +438,8 @@ class TikTokConversionsService:
     async def track_initiate_checkout(
         self,
         email: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
         external_id: Optional[str] = None,
         client_ip: Optional[str] = None,
         client_user_agent: Optional[str] = None,
@@ -459,6 +461,8 @@ class TikTokConversionsService:
         """
         user = self._get_user_data(
             email=email,
+            first_name=first_name,
+            last_name=last_name,
             external_id=external_id,
             ttp=ttp,
             ttclid=ttclid,

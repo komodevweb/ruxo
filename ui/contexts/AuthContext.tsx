@@ -96,6 +96,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               ttpCookie = cookie.substring(5);
             } else if (cookie.startsWith('_ttclid=')) {
               ttclidCookie = cookie.substring(8);
+            } else if (cookie.startsWith('ttclid=')) {
+              ttclidCookie = cookie.substring(7);
             }
           }
         } catch (e) {
@@ -305,6 +307,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     } else if (cookie.startsWith('_ttclid=')) {
                       ttclidCookie = cookie.substring(8);
                       console.log('[OAUTH FRONTEND] Found _ttclid cookie:', ttclidCookie.substring(0, 30) + '...');
+                    } else if (cookie.startsWith('ttclid=')) {
+                      ttclidCookie = cookie.substring(7);
+                      console.log('[OAUTH FRONTEND] Found ttclid cookie:', ttclidCookie.substring(0, 30) + '...');
                     }
                   }
                 } catch (e) {
@@ -500,6 +505,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ttpCookie = cookie.substring(5);
           } else if (cookie.startsWith('_ttclid=')) {
             ttclidCookie = cookie.substring(8);
+            console.log('[OAUTH FRONTEND] Found _ttclid cookie:', ttclidCookie.substring(0, 30) + '...');
+          } else if (cookie.startsWith('ttclid=')) {
+            ttclidCookie = cookie.substring(7);
+            console.log('[OAUTH FRONTEND] Found ttclid cookie:', ttclidCookie.substring(0, 30) + '...');
           }
         }
       } catch (e) {

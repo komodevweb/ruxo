@@ -59,7 +59,7 @@ async def create_checkout_session(
     fbc = request.cookies.get("_fbc")
     # TikTok cookies
     ttp = request.cookies.get("_ttp")
-    ttclid = request.cookies.get("_ttclid")
+    ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
     
     # If fbc cookie is not set but fbclid is in URL, create fbc from fbclid
     # Per Facebook docs: fbc format is fb.1.{timestamp}.{fbclid}
@@ -234,10 +234,18 @@ async def track_initiate_checkout(
         
         # Get TikTok cookies if available
         ttp = request.cookies.get("_ttp")
-        ttclid = request.cookies.get("_ttclid")
+        ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
+        
+        # Extract first and last name from display_name if available (for authenticated users)
+        first_name = None
+        last_name = None
+        if current_user and current_user.display_name:
+            name_parts = current_user.display_name.split(maxsplit=1)
+            first_name = name_parts[0] if name_parts else None
+            last_name = name_parts[1] if len(name_parts) > 1 else None
         
         # Extract value parameters from body (if provided)
         value = body.value if body else None
@@ -268,6 +276,8 @@ async def track_initiate_checkout(
         # TikTok tracking
         asyncio.create_task(tiktok_service.track_initiate_checkout(
             email=current_user.email if current_user else None,
+            first_name=first_name,
+            last_name=last_name,
             external_id=str(current_user.id) if current_user else None,
             client_ip=client_ip,
             client_user_agent=client_user_agent,
@@ -374,7 +384,7 @@ async def track_add_to_cart(
         
         # Get TikTok cookies if available
         ttp = request.cookies.get("_ttp")
-        ttclid = request.cookies.get("_ttclid")
+        ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
         
         # Get event_source_url from query params or use referer
         event_source_url = request.query_params.get("url") or request.headers.get("referer") or f"{settings.FRONTEND_URL}/upgrade"
@@ -662,7 +672,7 @@ async def skip_trial_and_subscribe(
         fbp = request.cookies.get("_fbp")
         fbc = request.cookies.get("_fbc")
         ttp = request.cookies.get("_ttp")
-        ttclid = request.cookies.get("_ttclid")
+        ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
         
         # Create checkout session with skip_trial=true
         service = BillingService(session)
