@@ -1602,6 +1602,44 @@ function Page() {
                                         loading={true}
                                         onSelectJob={(job) => {
                                              setSelectedJob(job);
+                                             // Restore settings if retrying a failed job
+                                             if (job && (job.status === 'failed' || job.status === 'completed')) {
+                                                  // Restore prompt
+                                                  if (job.input_prompt || job.prompt) {
+                                                       setPrompt(job.input_prompt || job.prompt);
+                                                  }
+                                                  
+                                                  // Restore settings from job object or settings dict
+                                                  const settings = job.settings || job;
+                                                  if (settings) {
+                                                       if (settings.size) setSize(settings.size);
+                                                       if (settings.duration) setDuration(settings.duration);
+                                                       if (settings.negative_prompt) setNegativePrompt(settings.negative_prompt);
+                                                       if (settings.enable_prompt_expansion !== undefined) {
+                                                            setEnablePromptExpansion(settings.enable_prompt_expansion);
+                                                       }
+                                                       if (settings.aspect_ratio) setAspectRatio(settings.aspect_ratio);
+                                                       
+                                                       // Restore model if available
+                                                       if ((settings.model || settings.model_id) && models.length > 0) {
+                                                            const modelId = settings.model || settings.model_id;
+                                                            const model = models.find(m => m.id === modelId);
+                                                            if (model) setSelectedModel(model);
+                                                       }
+                                                       
+                                                       // Restore image preview if available
+                                                       if (settings.image_url && !imagePreview) {
+                                                            setImagePreview(settings.image_url);
+                                                            setImageUrl(settings.image_url);
+                                                            imageUrlRef.current = settings.image_url;
+                                                       }
+                                                  }
+                                                  
+                                                  // Open sidebar on mobile
+                                                  if (window.innerWidth < 1024) {
+                                                       setSidebarOpen(true);
+                                                  }
+                                             }
                                         }}
                                    />
                               </div>
@@ -1629,6 +1667,44 @@ function Page() {
                                         loading={false}
                                         onSelectJob={(job) => {
                                              setSelectedJob(job);
+                                             // Restore settings if retrying a failed job
+                                             if (job && (job.status === 'failed' || job.status === 'completed')) {
+                                                  // Restore prompt
+                                                  if (job.input_prompt || job.prompt) {
+                                                       setPrompt(job.input_prompt || job.prompt);
+                                                  }
+                                                  
+                                                  // Restore settings from job object or settings dict
+                                                  const settings = job.settings || job;
+                                                  if (settings) {
+                                                       if (settings.size) setSize(settings.size);
+                                                       if (settings.duration) setDuration(settings.duration);
+                                                       if (settings.negative_prompt) setNegativePrompt(settings.negative_prompt);
+                                                       if (settings.enable_prompt_expansion !== undefined) {
+                                                            setEnablePromptExpansion(settings.enable_prompt_expansion);
+                                                       }
+                                                       if (settings.aspect_ratio) setAspectRatio(settings.aspect_ratio);
+                                                       
+                                                       // Restore model if available
+                                                       if ((settings.model || settings.model_id) && models.length > 0) {
+                                                            const modelId = settings.model || settings.model_id;
+                                                            const model = models.find(m => m.id === modelId);
+                                                            if (model) setSelectedModel(model);
+                                                       }
+                                                       
+                                                       // Restore image preview if available
+                                                       if (settings.image_url && !imagePreview) {
+                                                            setImagePreview(settings.image_url);
+                                                            setImageUrl(settings.image_url);
+                                                            imageUrlRef.current = settings.image_url;
+                                                       }
+                                                  }
+                                                  
+                                                  // Open sidebar on mobile
+                                                  if (window.innerWidth < 1024) {
+                                                       setSidebarOpen(true);
+                                                  }
+                                             }
                                         }}
                                    />
                               </div>

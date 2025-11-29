@@ -1108,6 +1108,39 @@ function page() {
                                                        loading={true}
                                                        onSelectJob={(job) => {
                                                             setSelectedJob(job);
+                                                            // Restore settings if retrying a failed job
+                                                            if (job && (job.status === 'failed' || job.status === 'completed')) {
+                                                                 if (job.settings) {
+                                                                      // Restore prompt
+                                                                      if (job.settings.prompt || job.input_prompt) {
+                                                                           setPrompt(job.settings.prompt || job.input_prompt);
+                                                                      }
+                                                                      // Restore resolution
+                                                                      if (job.settings.resolution) {
+                                                                           setActive(job.settings.resolution);
+                                                                      }
+                                                                      // Restore mode
+                                                                      if (job.settings.mode) {
+                                                                           setMode(job.settings.mode);
+                                                                      }
+                                                                      // Restore image/video previews if available
+                                                                      if (job.settings.image_url && !imagePreview) {
+                                                                           setImagePreview(job.settings.image_url);
+                                                                           setImageUrl(job.settings.image_url);
+                                                                           imageUrlRef.current = job.settings.image_url;
+                                                                      }
+                                                                      if (job.settings.video_url && !videoPreview) {
+                                                                           setVideoPreview(job.settings.video_url);
+                                                                           setVideoUrl(job.settings.video_url);
+                                                                           videoUrlRef.current = job.settings.video_url;
+                                                                      }
+                                                                      
+                                                                      // Open sidebar on mobile
+                                                                      if (window.innerWidth < 1024) {
+                                                                           setSidebarOpen(true);
+                                                                      }
+                                                                 }
+                                                            }
                                                        }}
                                                   />
                                              </div>
@@ -1136,10 +1169,40 @@ function page() {
                                                        selectedJobId={selectedJob?.job_id}
                                                        loading={false}
                                                        onSelectJob={(job) => {
-                                                            // For now, we can just set it as selected or maybe open a modal later
-                                                            // If we want it to play in place, the gallery component handles that via hover
-                                                            // If clicking should do something else (like download), we can add that
                                                             setSelectedJob(job);
+                                                            // Restore settings if retrying a failed job
+                                                            if (job && (job.status === 'failed' || job.status === 'completed')) {
+                                                                 if (job.settings) {
+                                                                      // Restore prompt
+                                                                      if (job.settings.prompt || job.input_prompt) {
+                                                                           setPrompt(job.settings.prompt || job.input_prompt);
+                                                                      }
+                                                                      // Restore resolution
+                                                                      if (job.settings.resolution) {
+                                                                           setActive(job.settings.resolution);
+                                                                      }
+                                                                      // Restore mode
+                                                                      if (job.settings.mode) {
+                                                                           setMode(job.settings.mode);
+                                                                      }
+                                                                      // Restore image/video previews if available
+                                                                      if (job.settings.image_url && !imagePreview) {
+                                                                           setImagePreview(job.settings.image_url);
+                                                                           setImageUrl(job.settings.image_url);
+                                                                           imageUrlRef.current = job.settings.image_url;
+                                                                      }
+                                                                      if (job.settings.video_url && !videoPreview) {
+                                                                           setVideoPreview(job.settings.video_url);
+                                                                           setVideoUrl(job.settings.video_url);
+                                                                           videoUrlRef.current = job.settings.video_url;
+                                                                      }
+                                                                      
+                                                                      // Open sidebar on mobile
+                                                                      if (window.innerWidth < 1024) {
+                                                                           setSidebarOpen(true);
+                                                                      }
+                                                                 }
+                                                            }
                                                        }}
                                                   />
                                              </div>

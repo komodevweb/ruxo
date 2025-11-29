@@ -473,7 +473,42 @@ function page() {
      // Memoized callback for VideoGallery to prevent unnecessary re-renders
      const handleSelectJob = useCallback((job: any) => {
           setSelectedJob(job);
-     }, []);
+          
+          // Auto-fill form for retrying failed jobs or reusing completed ones
+          if (job) {
+               // Restore prompt
+               if (job.input_prompt || job.prompt) {
+                    setPrompt(job.input_prompt || job.prompt);
+               }
+               
+               // Restore settings
+               if (job.settings || job) {
+                    const settings = job.settings || job;
+                    
+                    if (settings.size) setSize(settings.size);
+                    if (settings.duration) setDuration(settings.duration);
+                    if (settings.negative_prompt) setNegativePrompt(settings.negative_prompt);
+                    if (settings.enable_prompt_expansion !== undefined) {
+                         setEnablePromptExpansion(settings.enable_prompt_expansion);
+                    }
+                    
+                    // Restore model if available in list
+                    if ((settings.model || settings.model_id) && models.length > 0) {
+                         const modelId = settings.model || settings.model_id;
+                         const model = models.find(m => m.id === modelId);
+                         if (model) setSelectedModel(model);
+                    }
+               }
+               
+               // If on mobile, open sidebar so user sees the populated form
+               if (window.innerWidth < 1024) {
+                    setSidebarOpen(true);
+               }
+               
+               // If it was a failed job, scroll to top/sidebar on desktop too? 
+               // Optional but good UX
+          }
+     }, [models]);
 
      // Get button text and action
      const getButtonConfig = () => {
@@ -961,11 +996,19 @@ function page() {
                cleanupPolling();
                const currentStatus = jobStatus;
                if (currentStatus !== "completed" && currentStatus !== "failed") {
-                    setError("Job is taking longer than expected. You can check back later or refresh the page to see the status.");
+                    // Don't set error, just stop blocking the UI
+                    // The job continues in background and will appear in gallery when done
                     setIsGenerating(false);
                     setIsPolling(false);
                     isSubmittingRef.current = false;
-                    console.log("Polling timeout reached, but job may still be processing on the server");
+                    
+                    // Optional: Show a toast or smaller notification instead of error
+                    console.log("Polling timeout reached - job continues in background");
+                    
+                    // Clean up localStorage so we don't auto-resume this specific job immediately
+                    if (jobIdToPoll) {
+                         safeLocalStorage.removeItem(`job_start_${jobIdToPoll}`);
+                    }
                }
           }, MAX_POLL_TIME);
           console.log("✅ Started polling timeout:", pollTimeoutRef.current);

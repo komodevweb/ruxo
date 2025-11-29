@@ -28,6 +28,7 @@ const VideoCard = memo(({
   const [isDownloading, setIsDownloading] = useState(false);
   const hasOutput = !!job.output_url;
   const isRunning = (job.status === "pending" || job.status === "running") && !hasOutput;
+  const isFailed = job.status === "failed";
 
   // Determine initial style from metadata
   useEffect(() => {
@@ -232,6 +233,25 @@ const VideoCard = memo(({
               />
            </div>
         </div>
+      ) : isFailed ? (
+        <div 
+           onClick={(e) => {
+             e.stopPropagation();
+             onSelectJob(job);
+           }}
+           className="w-full h-full bg-red-900/20 border border-red-500/30 flex flex-col items-center justify-center p-4 text-center cursor-pointer hover:bg-red-900/30 transition-colors group/failed"
+        >
+           <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center mb-3 group-hover/failed:bg-red-500/20 transition-colors">
+             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-400">
+               <circle cx="12" cy="12" r="10"></circle>
+               <line x1="15" y1="9" x2="9" y2="15"></line>
+               <line x1="9" y1="9" x2="15" y2="15"></line>
+             </svg>
+           </div>
+           <p className="text-sm font-medium text-red-400 mb-1">Generation Failed</p>
+           <p className="text-xs text-red-400/60 line-clamp-2 mb-3">{job.error || "An error occurred"}</p>
+           <span className="text-[10px] bg-red-500/10 text-red-300 px-2.5 py-1 rounded-full border border-red-500/20 group-hover/failed:bg-red-500/20 transition-colors">Click to Retry</span>
+        </div>
       ) : null}
     </div>
   );
@@ -368,7 +388,8 @@ function VideoGalleryInner({ jobs, selectedJobId, loading = false, onSelectJob }
     .filter((job: any) => {
       const hasOutput = !!job.output_url;
       const isRunning = (job.status === "pending" || job.status === "running") && !hasOutput;
-      return hasOutput || isRunning;
+      const isFailed = job.status === "failed";
+      return hasOutput || isRunning || isFailed;
     });
 
   const totalPages = Math.ceil(processedJobs.length / itemsPerPage);
