@@ -177,7 +177,72 @@ cd ui
 npm run dev
 ```
 
-### Step 8: Access the Application
+### Step 8: Activate Stripe Local Webhook (Required for Payments)
+
+To receive Stripe webhook events locally (for testing payments, subscriptions, and trial credits), you need to use the Stripe CLI:
+
+**Option A: Using Stripe CLI (Recommended)**
+
+1. **Install Stripe CLI:**
+   - Windows: Download from https://github.com/stripe/stripe-cli/releases
+   - macOS: `brew install stripe/stripe-cli/stripe`
+   - Linux: See https://stripe.com/docs/stripe-cli
+
+2. **Login to Stripe:**
+   ```bash
+   stripe login
+   ```
+   This will open your browser to authenticate with Stripe.
+
+3. **Forward webhooks to your local backend:**
+   ```bash
+   stripe listen --forward-to localhost:8000/api/v1/webhooks/stripe
+   ```
+
+4. **Copy the webhook signing secret:**
+   The CLI will output something like:
+   ```
+   > Ready! Your webhook signing secret is whsec_xxxxxxxxxxxxx
+   ```
+   **Copy this secret!**
+
+5. **Update your `.env` file:**
+   Open `backend/.env` and update:
+   ```env
+   STRIPE_WEBHOOK_SECRET="whsec_xxxxxxxxxxxxx"
+   ```
+   (Use the secret from step 4)
+
+6. **Restart your backend server** (if it's already running) to load the new webhook secret.
+
+**Option B: Using ngrok (Alternative)**
+
+If you prefer using ngrok instead:
+
+1. **Install ngrok:** https://ngrok.com/download
+2. **Start ngrok:**
+   ```bash
+   ngrok http 8000
+   ```
+3. **Copy the HTTPS URL** (e.g., `https://abc123.ngrok.io`)
+4. **In Stripe Dashboard:**
+   - Go to https://dashboard.stripe.com/webhooks
+   - Click "Add endpoint"
+   - Set URL to: `https://abc123.ngrok.io/api/v1/webhooks/stripe`
+   - Select events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`
+   - Copy the **Signing secret** (starts with `whsec_`)
+5. **Update `backend/.env`:**
+   ```env
+   STRIPE_WEBHOOK_SECRET="whsec_YOUR_SECRET_FROM_STRIPE"
+   ```
+
+**Important Notes:**
+- Keep the `stripe listen` command running in a separate terminal while developing
+- The webhook secret from Stripe CLI is different from production webhook secrets
+- Without webhooks, payments won't grant credits or create subscriptions automatically
+- You can test webhooks with: `stripe trigger checkout.session.completed`
+
+### Step 9: Access the Application
 
 Once both servers are running:
 
@@ -273,10 +338,11 @@ npm start
 
 ## Next Steps
 
-1. **Configure OAuth Providers** - See `backend/SUPABASE_OAUTH_SETUP.md`
-2. **Set up Stripe Webhooks** - See `backend/WEBHOOK_SETUP.md`
-3. **Seed Subscription Plans** - Run `python scripts/seed_plans.py`
-4. **Test Authentication** - Create an account and test login flow
+1. **Activate Stripe Local Webhook** - See Step 8 above (required for payments to work)
+2. **Seed Subscription Plans** - Run `python scripts/seed_plans.py`
+3. **Test Authentication** - Create an account and test login flow
+4. **Test Payments** - Try subscribing to a plan to verify webhooks are working
+5. **Configure OAuth Providers** - See `backend/SUPABASE_OAUTH_SETUP.md` (optional)
 
 ---
 
@@ -323,6 +389,19 @@ npm run dev
 # Production build
 npm run build
 npm start
+```
+
+**Stripe Webhook Commands:**
+```bash
+# Login to Stripe (first time only)
+stripe login
+
+# Forward webhooks to local backend (keep this running)
+stripe listen --forward-to localhost:8000/api/v1/webhooks/stripe
+
+# Test webhook events
+stripe trigger checkout.session.completed
+stripe trigger customer.subscription.created
 ```
 
 

@@ -22,7 +22,11 @@ tiktok_conversions_logger = logging.getLogger("tiktok_conversions_api")
 tiktok_conversions_logger.setLevel(logging.INFO)
 
 # Create logs directory if it doesn't exist
-log_dir = "/root/ruxo/logs"
+# Determine project root relative to this file (backend/app/services/tiktok_conversions.py)
+from pathlib import Path
+backend_dir = Path(__file__).resolve().parent.parent.parent
+project_root = backend_dir.parent
+log_dir = os.path.join(project_root, "logs")
 os.makedirs(log_dir, exist_ok=True)
 
 # Create rotating file handler (max 50MB per file, keep 5 files)
@@ -246,6 +250,8 @@ class TikTokConversionsService:
                 logger.info(f"  - first_name: {'✓' if user.get('first_name') else '✗'}")
                 logger.info(f"  - last_name: {'✓' if user.get('last_name') else '✗'}")
                 logger.info(f"  - external_id: {'✓' if user.get('external_id') else '✗'}")
+                logger.info(f"  - ttp: {'✓' if user.get('ttp') else '✗'} ({user.get('ttp', 'N/A')})")
+                logger.info(f"  - ttclid: {'✓' if user.get('ttclid') else '✗'} ({user.get('ttclid', 'N/A')})")
                 logger.info(f"📊 CompletePayment Context Fields:")
                 logger.info(f"  - ip: {'✓' if context.get('ip') else '✗'}")
                 logger.info(f"  - user_agent: {'✓' if context.get('user_agent') else '✗'}")
@@ -269,6 +275,8 @@ class TikTokConversionsService:
                 logger.debug(f"  - first_name: {'✓' if user.get('first_name') else '✗'}")
                 logger.debug(f"  - last_name: {'✓' if user.get('last_name') else '✗'}")
                 logger.debug(f"  - external_id: {'✓' if user.get('external_id') else '✗'}")
+                logger.debug(f"  - ttp: {'✓' if user.get('ttp') else '✗'}")
+                logger.debug(f"  - ttclid: {'✓' if user.get('ttclid') else '✗'}")
                 logger.debug(f"📊 AddToCart Context Fields:")
                 logger.debug(f"  - ip: {'✓' if context.get('ip') else '✗'}")
                 logger.debug(f"  - user_agent: {'✓' if context.get('user_agent') else '✗'}")
@@ -286,11 +294,11 @@ class TikTokConversionsService:
             payload_for_logging = payload.copy()
             
             # Log concise summary to main console (no JSON)
-            logger.info(f"📤 Sending {event_name} event to TikTok Events API")
+            logger.info(f"[OUT] Sending {event_name} event to TikTok Events API")
             
             # Log full details to dedicated file
             tiktok_conversions_logger.info("=" * 100)
-            tiktok_conversions_logger.info(f"📤 OUTGOING REQUEST - {event_name} Event")
+            tiktok_conversions_logger.info(f"[OUT] OUTGOING REQUEST - {event_name} Event")
             tiktok_conversions_logger.info(f"URL: {self.api_url}")
             tiktok_conversions_logger.info(f"HTTP Method: POST")
             tiktok_conversions_logger.info(f"Request Payload:")
@@ -310,11 +318,11 @@ class TikTokConversionsService:
                 # Log concise response to main console (no JSON)
                 code = result.get("code", -1)
                 message = result.get("message", "Unknown")
-                logger.info(f"📥 TikTok response: {response.status_code} - Code: {code}, Message: {message}")
+                logger.info(f"[IN] TikTok response: {response.status_code} - Code: {code}, Message: {message}")
                 
                 # Log full response to dedicated file
                 tiktok_conversions_logger.info("=" * 100)
-                tiktok_conversions_logger.info(f"📥 INCOMING RESPONSE - {event_name} Event")
+                tiktok_conversions_logger.info(f"[IN] INCOMING RESPONSE - {event_name} Event")
                 tiktok_conversions_logger.info(f"HTTP Status Code: {response.status_code}")
                 tiktok_conversions_logger.info(f"Response Headers: {dict(response.headers)}")
                 tiktok_conversions_logger.info(f"Response Body:")
@@ -335,10 +343,10 @@ class TikTokConversionsService:
                 
                 # Success
                 if code == 0:
-                    logger.info(f"✅ {event_name} event successfully sent")
+                    logger.info(f"[SUCCESS] {event_name} event successfully sent")
                     return True
                 else:
-                    logger.warning(f"⚠️  TikTok returned code {code} for {event_name}")
+                    logger.warning(f"[WARNING] TikTok returned code {code} for {event_name}")
                     return False
                     
         except httpx.HTTPStatusError as e:
@@ -600,6 +608,61 @@ class TikTokConversionsService:
         
         return await self.send_event(
             event_name="AddToCart",
+            user=user,
+            context=context,
+            properties=properties if properties else None,
+            event_id=event_id,
+        )
+
+    async def track_start_trial(
+        self,
+        value: float,
+        currency: str = "USD",
+        email: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        external_id: Optional[str] = None,
+        client_ip: Optional[str] = None,
+        client_user_agent: Optional[str] = None,
+        event_source_url: Optional[str] = None,
+        event_id: Optional[str] = None,
+        ttp: Optional[str] = None,
+        ttclid: Optional[str] = None,
+    ) -> bool:
+        """
+        Track StartTrial event (used for trial starts).
+        
+        Sends all TikTok-recommended parameters including:
+        - User data: email, first/last name, external_id, ttp, ttclid
+        - Context: client_ip, user_agent, page URL
+        - Properties: value, currency
+        - Event ID: for deduplication
+        
+        All PII (email, names) are automatically SHA-256 hashed before sending.
+        TikTok cookies (ttp, ttclid) are passed as-is for attribution.
+        """
+        user = self._get_user_data(
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            external_id=external_id,
+            ttp=ttp,
+            ttclid=ttclid,
+        )
+        
+        context = self._get_context(
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            event_source_url=event_source_url,
+        )
+        
+        properties = self._get_properties(
+            currency=currency,
+            value=value,
+        )
+        
+        return await self.send_event(
+            event_name="StartTrial",
             user=user,
             context=context,
             properties=properties if properties else None,

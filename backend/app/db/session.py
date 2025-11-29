@@ -13,10 +13,12 @@ engine = create_async_engine(
     future=True
 )
 
+# Session maker for creating sessions outside of request context (e.g., background tasks)
+async_session_maker = sessionmaker(
+    engine, class_=AsyncSession, expire_on_commit=False
+)
+
 async def get_session() -> AsyncSession:
-    async_session = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-    async with async_session() as session:
+    async with async_session_maker() as session:
         yield session
 

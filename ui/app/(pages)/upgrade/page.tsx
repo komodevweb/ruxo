@@ -2,9 +2,9 @@
 import HighlightedPricingCard from '@/app/components/HighlightedPricingCard'
 import PricingCard from '@/app/components/PricingCard'
 import { PricingSkeleton } from '@/app/components/PricingSkeleton'
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { apiClient } from "@/lib/api";
 import { trackInitiateCheckout, trackAddToCart } from "@/lib/facebookTracking";
 
@@ -17,15 +17,21 @@ interface Plan {
      original_amount_cents?: number | null;
      original_amount_dollars?: number | null;
      interval: string;
+     interval_display?: string;  // For displaying "one-time" instead of "/month" or "/year"
      credits_per_month: number;
      currency: string;
+     trial_days?: number;
+     trial_amount_cents?: number;
+     trial_amount_dollars?: number;
+     trial_credits?: number;
 }
 
 
-function page() {
+function UpgradeContent() {
      console.warn("DEBUG: Upgrade Page Component Rendered");
      const { user, loading: authLoading, checkAuth } = useAuth();
      const router = useRouter();
+     const searchParams = useSearchParams();
      
      // Start with yearly by default
      const [Monthly, setMonthly] = useState<'monthly' | 'yearly'>('yearly');
@@ -169,8 +175,15 @@ function page() {
                     console.warn('NEXT_PUBLIC_API_V1_URL is not configured');
                }
                
+               // Check for skip_trial query parameter OR if user already has a plan (active or trialing)
+               // If user has a plan, they should pay directly (skip new trial)
+               const shouldSkipTrial = 
+                    (searchParams && searchParams.get('skip_trial') === 'true') || 
+                    (user && user.plan_name);
+
                const response = await apiClient.post<{ url: string }>('/billing/create-checkout-session', {
                     plan_name: planName,
+                    skip_trial: !!shouldSkipTrial
                });
                
                console.log('Checkout session response:', response);
@@ -415,7 +428,24 @@ function page() {
 
      // Determine if plan is upgrade, downgrade, or current
      const getPlanStatus = (plan: Plan) => {
-          if (!hasActiveSubscription || !user?.plan_name) {
+          // Check if user has an active subscription or trial
+          const hasSubscription = hasActiveSubscription;
+          
+          // Debug logging
+          console.log('[getPlanStatus] Checking plan:', {
+               planName: plan.name,
+               planDisplayName: plan.display_name,
+               userPlanName: user?.plan_name,
+               userPlanInterval: user?.plan_interval,
+               hasActiveSubscription,
+               hasSubscription,
+               creditBalance: user?.credit_balance,
+               planInterval: plan.interval
+          });
+          
+          // If user has no plan_name, they don't have a subscription
+          if (!hasSubscription || !user?.plan_name) {
+               console.log('[getPlanStatus] No subscription or plan_name, returning new');
                return { type: 'new', canSelect: true };
           }
           
@@ -424,6 +454,53 @@ function page() {
           
           // Get user's plan key and interval
           const userPlanKey = getPlanKeyFromDisplayName(user.plan_name);
+          const planKey = plan.name.split('_')[0];
+          
+          // Also check if plan display_name matches user's plan_name (more direct comparison)
+          // Normalize both by lowercasing and trimming
+          const normalizedUserPlan = user.plan_name.toLowerCase().trim();
+          const normalizedPlanDisplay = plan.display_name.toLowerCase().trim();
+          const isDisplayNameMatch = normalizedUserPlan === normalizedPlanDisplay;
+          
+          // Also check if plan name (internal) matches - sometimes backend might return internal name
+          const normalizedPlanName = plan.name.toLowerCase().trim();
+          
+          // Only match if the plan name contains the specific interval we're looking for
+          // or if it's an exact match
+          let isPlanNameMatch = false;
+          if (normalizedUserPlan === normalizedPlanName) {
+               isPlanNameMatch = true;
+          } else {
+               // If not exact match, check if parts match AND interval matches
+               const userPlanBase = normalizedUserPlan.split('_')[0].split(' ')[0]; // "starter"
+               const planNameBase = normalizedPlanName.split('_')[0]; // "starter"
+               
+               // Check if base names match
+               if (userPlanBase === planNameBase) {
+                    // Check if intervals match
+                    const userHasYearly = normalizedUserPlan.includes('year') || normalizedUserPlan.includes('annual');
+                    const planIsYearly = normalizedPlanName.includes('year') || normalizedPlanName.includes('annual');
+                    
+                    // Match only if intervals are the same
+                    if (userHasYearly === planIsYearly) {
+                         isPlanNameMatch = true;
+                    }
+               }
+          }
+          
+          console.log('[getPlanStatus] Matching details:', {
+               userPlanKey,
+               planKey,
+               isDisplayNameMatch,
+               isPlanNameMatch,
+               userPlanName: user.plan_name,
+               normalizedUserPlan,
+               planDisplayName: plan.display_name,
+               normalizedPlanDisplay,
+               planName: plan.name,
+               planInterval,
+               currentPlanInterval
+          });
           
           // If user has yearly subscription, they can only see yearly plans
           if (currentPlanInterval === 'year' && planInterval !== 'year') {
@@ -434,12 +511,19 @@ function page() {
           // (yearly would be an upgrade)
           
           // Check if this is the exact same plan (same tier AND same interval)
-          const isExactMatch = userPlanKey === plan.name.split('_')[0] && 
-                              planInterval === currentPlanInterval &&
-                              currentPlanInterval !== null;
+          // OR if display names match exactly (handles edge cases)
+          // OR if plan names match (handles cases where backend returns internal name)
+          const isExactMatch = isDisplayNameMatch || isPlanNameMatch || (
+               userPlanKey === planKey && 
+               planInterval === currentPlanInterval &&
+               currentPlanInterval !== null
+          );
+          
+          console.log('[getPlanStatus] isExactMatch:', isExactMatch);
           
           if (isExactMatch) {
-               // This is the user's current plan
+               // This is the user's current plan (active subscription or trial)
+               console.log('[getPlanStatus] Found exact match, returning current');
                return { type: 'current', canSelect: false };
           }
           
@@ -452,7 +536,7 @@ function page() {
                return { type: 'downgrade', canSelect: false };
           } else {
                // Same tier but different interval
-               if (userPlanKey === plan.name.split('_')[0]) {
+               if (userPlanKey === planKey) {
                     // Same plan type, different interval
                     if (planInterval === 'month' && currentPlanInterval === 'year') {
                          // User has yearly, viewing monthly -> incompatible
@@ -560,6 +644,11 @@ function page() {
                                         let buttonText = "Select Plan";
                                         let buttonOnClick: ((e?: React.MouseEvent) => void) | undefined = undefined;
                                         
+                                        // Debug logging for button text
+                                        if (!isAuthLoading && user) {
+                                             console.log(`[Button Text] Plan: ${plan.name}, Status: ${planStatus.type}, User Plan: ${user.plan_name}`);
+                                        }
+                                        
                                         if (isAuthLoading) {
                                              buttonText = "Loading...";
                                         } else if (isProcessing || isManagingPlan) {
@@ -573,6 +662,9 @@ function page() {
                                         } else if (planStatus.type === 'downgrade' || planStatus.type === 'incompatible') {
                                              // Show "Not Available" for any downgrade or incompatible plan
                                              buttonText = "Not Available";
+                                        } else if (planStatus.type === 'new') {
+                                             buttonText = "Start Free Trial";
+                                             buttonOnClick = (e?: React.MouseEvent) => handleSelectPlan(plan.name, e);
                                         } else if (planStatus.canSelect) {
                                              buttonOnClick = (e?: React.MouseEvent) => handleSelectPlan(plan.name, e);
                                         }
@@ -580,11 +672,17 @@ function page() {
                                         // Dim any card that shows "Not Available"
                                         const shouldDim = isAuthLoading ? false : (buttonText === "Not Available");
                                         
+                                        // Determine duration display - handle one-time payments
+                                        let durationDisplay = Monthly === "monthly" ? "/month" : "/year";
+                                        if (plan.interval === "one_time" || plan.interval_display === "one-time") {
+                                             durationDisplay = " one-time";
+                                        }
+                                        
                                         const cardProps = {
                                              plan: displayName,
                                              price: formatPrice(plan.amount_dollars),
                                              originalPrice: originalPrice,
-                                             duration: Monthly === "monthly" ? "/month" : "/year",
+                                             duration: durationDisplay,
                                              description: description,
                                              planInlude: `${displayName} Plan includes`,
                                              buttonText: buttonText,
@@ -686,4 +784,10 @@ function page() {
      )
 }
 
-export default page
+export default function UpgradePage() {
+     return (
+          <Suspense fallback={<PricingSkeleton />}>
+               <UpgradeContent />
+          </Suspense>
+     );
+}

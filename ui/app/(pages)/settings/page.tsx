@@ -16,6 +16,7 @@ function SettingsContent() {
   const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [isProcessingSubscription, setIsProcessingSubscription] = useState(false);
 
   // Clean up session_id from URL if present
   useEffect(() => {
@@ -37,6 +38,25 @@ function SettingsContent() {
       setDisplayName(user.display_name || "");
     }
   }, [user, authLoading, router]);
+
+  const handleSubscribe = async () => {
+    setIsProcessingSubscription(true);
+    setError("");
+
+    try {
+      const response = await apiClient.post<{ url: string }>("/billing/skip-trial-and-subscribe", {});
+      
+      if (response.url) {
+        window.location.href = response.url;
+      } else {
+        throw new Error("No checkout URL returned");
+      }
+    } catch (error: any) {
+      console.error("Failed to create checkout session:", error);
+      setError(error.message || "Failed to start subscription");
+      setIsProcessingSubscription(false);
+    }
+  };
 
   const handleUpdateDisplayName = async () => {
     if (!displayName.trim()) {
@@ -122,9 +142,33 @@ function SettingsContent() {
                   {user.plan_name ? "Manage" : "Subscribe"}
                 </Link>
               </div>
-              <h6 className='text-base font-medium leading-[120%] text-white'>
+              <h6 className='text-base font-medium leading-[120%] text-white flex items-center flex-wrap gap-2'>
                 {user.plan_name || "No Plan"}
+                {user.subscription_status === 'trialing' && (
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-blue-1100/10 text-blue-1100 border border-blue-1100/20">
+                    Free Trial
+                  </span>
+                )}
               </h6>
+              
+              {/* Free Trial Subscribe Box */}
+              {user.subscription_status === 'trialing' && (
+                <div className='mt-4 rounded-lg border border-blue-1100 bg-[url(/images/card-bg.png)] bg-cover bg-no-repeat overflow-hidden p-[14px] flex items-center justify-between'>
+                  <div>
+                    <h6 className='text-xs font-medium leading-[120%] text-blue-1100 mb-1'>Trial Period Active</h6>
+                    <p className='text-[10px] font-medium leading-[120%] text-white/60'>Skip the trial and subscribe to {user.plan_name}</p>
+                  </div>
+                  <button 
+                    onClick={handleSubscribe}
+                    disabled={isProcessingSubscription}
+                    className='text-[10px] font-medium leading-[120%] text-white inline-block py-[9px] px-3 transition-all ease-in-out duration-500 hover:bg-gray-1200 bg-gray-1100/30 rounded-lg backdrop-blur-[4px] disabled:opacity-50 disabled:cursor-not-allowed'
+                  >
+                    {isProcessingSubscription ? "Processing..." : "Subscribe"}
+                  </button>
+                </div>
+              )}
+
+              {/* No Plan Upgrade Box */}
               {!user.plan_name && (
                 <div className='mt-4 rounded-lg border border-blue-1100 bg-[url(/images/card-bg.png)] bg-cover bg-no-repeat overflow-hidden p-[14px] flex items-center justify-between'>
                   <div>
@@ -200,6 +244,18 @@ function SettingsContent() {
                   </h6>
                 )}
               </div>
+
+              {/* Subscription Status - Only show if trialing or not active */}
+              {user.subscription_status && user.subscription_status !== 'active' && (
+                <div>
+                  <div className='flex items-center mb-2 justify-between'>
+                    <span className='block text-base font-medium leading-[120%] text-white/[60%]'>Status</span>
+                  </div>
+                  <h6 className='text-base font-medium text-white leading-[120%] capitalize'>
+                    {user.subscription_status.replace('_', ' ')}
+                  </h6>
+                </div>
+              )}
 
               {/* Email */}
               <div>

@@ -12,6 +12,7 @@ interface User {
   credit_balance: number;
   plan_name: string | null;
   plan_interval: string | null; // 'month' or 'year'
+  subscription_status: string | null; // 'active', 'trialing', 'canceled', etc.
   credits_per_month: number | null; // Credits provided by the plan
 }
 

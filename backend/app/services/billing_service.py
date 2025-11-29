@@ -64,6 +64,7 @@ class BillingService:
         self,
         user: UserProfile,
         plan_name: str,
+        skip_trial: bool = False,
         client_ip: Optional[str] = None,
         client_user_agent: Optional[str] = None,
         fbp: Optional[str] = None,
@@ -95,14 +96,15 @@ class BillingService:
         # If user has an active subscription, handle upgrade/downgrade
         # SECURITY: Do NOT cancel admin subscriptions (manually granted) - they should use portal
         # Only cancel real Stripe subscriptions, and only if they're upgrading/downgrading to a different plan
-        if existing_subscription:
+        if existing_subscription and not skip_trial:
             # Check if this is an admin subscription (manually granted, starts with "admin_")
             is_admin_subscription = existing_subscription.stripe_subscription_id.startswith("admin_")
             
             # Check if user is trying to select the same plan they already have
-            current_plan_key = existing_subscription.plan_name.split('_')[0]  # e.g., "pro" from "pro_monthly"
-            new_plan_key = plan_name.split('_')[0]  # e.g., "pro" from "pro_monthly"
-            is_same_plan = current_plan_key == new_plan_key
+            # FIX: Compare full plan names to allow switching intervals (e.g. monthly -> yearly)
+            # current_plan_key = existing_subscription.plan_name.split('_')[0] 
+            # new_plan_key = plan_name.split('_')[0]
+            is_same_plan = existing_subscription.plan_name == plan_name
             
             if is_admin_subscription:
                 # Admin subscriptions should use customer portal, not checkout
@@ -123,287 +125,17 @@ class BillingService:
             # User is upgrading/downgrading to a different plan
             logger.info(f"User {user.id} has active subscription {existing_subscription.stripe_subscription_id}, upgrading to {plan_name}")
             
-            try:
-                # Get or create Stripe customer (validates customer exists in Stripe)
-                if existing_subscription.stripe_customer_id:
-                    # Verify customer exists, create new one if it doesn't
-                    try:
-                        stripe.Customer.retrieve(existing_subscription.stripe_customer_id)
-                        customer_id = existing_subscription.stripe_customer_id
-                    except stripe.error.StripeError:
-                        # Customer doesn't exist, get or create a new one
-                        logger.warning(f"Customer {existing_subscription.stripe_customer_id} not found in Stripe. Creating new customer.")
-                        customer_id = await self._get_or_create_customer(user)
-                        # Update subscription with new customer ID
-                        existing_subscription.stripe_customer_id = customer_id
-                        self.session.add(existing_subscription)
-                        await self.session.commit()
-                else:
-                    customer_id = await self._get_or_create_customer(user)
+            # FORCE skip_trial=True since they already have a subscription (active or trial)
+            # This ensures they pay full price immediately for the new plan
+            skip_trial = True
             
-                # For upgrades/downgrades, use Stripe's subscription modification instead of canceling
-                # This preserves the subscription and just changes the plan
-                try:
-                    # Retrieve the current subscription from Stripe
-                    stripe_subscription = stripe.Subscription.retrieve(existing_subscription.stripe_subscription_id)
-                    
-                    # Update the subscription to the new plan (Stripe handles proration)
-                    updated_subscription = stripe.Subscription.modify(
-                        existing_subscription.stripe_subscription_id,
-                        items=[{
-                            'id': stripe_subscription['items']['data'][0].id,
-                            'price': plan.stripe_price_id,
-                        }],
-                        proration_behavior='always_invoice',  # Charge immediately for prorated amount
-                    )
-                    
-                    logger.info(f"Updated subscription {existing_subscription.stripe_subscription_id} to plan {plan_name} via Stripe API")
-                    
-                    # Update our database to reflect the new plan
-                    existing_subscription.plan_id = plan.id
-                    existing_subscription.plan_name = plan.name
-                    existing_subscription.updated_at = datetime.utcnow()
-                    self.session.add(existing_subscription)
-                    await self.session.commit()
-                    
-                    # Track Purchase event for subscription upgrade/downgrade
-                    # This is critical because Subscription.modify() doesn't trigger checkout.session.completed webhook
-                    try:
-                        from app.services.facebook_conversions import FacebookConversionsService
-                        from app.services.tiktok_conversions import TikTokConversionsService
-                        
-                        # Calculate purchase value
-                        value = plan.amount_cents / 100.0
-                        currency = "USD"
-                        event_id = f"sub_modify_{existing_subscription.stripe_subscription_id}_{int(time.time())}"
-                        
-                        # Extract name parts from display_name
-                        first_name = None
-                        last_name = None
-                        if user.display_name:
-                            name_parts = user.display_name.split(maxsplit=1)
-                            first_name = name_parts[0] if name_parts else None
-                            last_name = name_parts[1] if len(name_parts) > 1 else None
-                        
-                        logger.info("=" * 80)
-                        logger.info(f"💰 [PURCHASE TRACKING] Tracking Purchase for Subscription.modify() upgrade")
-                        logger.info(f"💰 [PURCHASE TRACKING] User: {user.email}, Plan: {plan_name}, Value: ${value}")
-                        logger.info(f"💰 [PURCHASE TRACKING] Using tracking context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}...")
-                        logger.info(f"💰 [PURCHASE TRACKING] Facebook Cookies: fbp={fbp}, fbc={fbc}")
-                        logger.info(f"💰 [PURCHASE TRACKING] TikTok Cookies: ttp={ttp}, ttclid={ttclid}")
-                        
-                        conversions_service = FacebookConversionsService()
-                        tiktok_service = TikTokConversionsService()
-                        import asyncio
-                        # Facebook tracking
-                        asyncio.create_task(conversions_service.track_purchase(
-                            value=value,
-                            currency=currency,
-                            email=user.email,
-                            first_name=first_name,
-                            last_name=last_name,
-                            external_id=str(user.id),
-                            client_ip=client_ip,
-                            client_user_agent=client_user_agent,
-                            fbp=fbp,
-                            fbc=fbc,
-                            event_source_url=f"{settings.FRONTEND_URL}/upgrade",
-                            event_id=event_id,
-                        ))
-                        # TikTok tracking
-                        asyncio.create_task(tiktok_service.track_purchase(
-                            value=value,
-                            currency=currency,
-                            email=user.email,
-                            first_name=first_name,
-                            last_name=last_name,
-                            external_id=str(user.id),
-                            client_ip=client_ip,
-                            client_user_agent=client_user_agent,
-                            event_source_url=f"{settings.FRONTEND_URL}/upgrade",
-                            event_id=event_id,
-                            ttp=ttp,
-                            ttclid=ttclid,
-                        ))
-                        logger.info(f"✅ [PURCHASE TRACKING] Purchase event triggered for subscription upgrade")
-                        logger.info("=" * 80)
-                    except Exception as e:
-                        logger.error(f"❌ [PURCHASE TRACKING] Failed to track Purchase event for upgrade: {str(e)}", exc_info=True)
-                    
-                    # Return the customer portal URL instead of checkout URL
-                    # User should use portal to manage their updated subscription
-                    portal_session = stripe.billing_portal.Session.create(
-                        customer=customer_id,
-                        return_url=f"{settings.FRONTEND_URL}/upgrade",
-                    )
-                    return portal_session.url
-                    
-                except stripe.error.InvalidRequestError as e:
-                    error_msg = str(e)
-                    if "No such subscription" in error_msg:
-                        # Subscription doesn't exist in Stripe, but exists in our DB
-                        # This can happen with admin subscriptions or deleted subscriptions
-                        # Allow creating a new checkout session instead of blocking
-                        logger.warning(f"Subscription {existing_subscription.stripe_subscription_id} not found in Stripe. Marking as cancelled and creating new checkout session.")
-                        
-                        # Mark the old subscription as cancelled since it doesn't exist in Stripe
-                        existing_subscription.status = "cancelled"
-                        existing_subscription.cancelled_at = datetime.utcnow()
-                        self.session.add(existing_subscription)
-                        await self.session.commit()
-                        
-                        # Create a new checkout session for the new plan
-                        # Verify the price ID exists in Stripe
-                        try:
-                            stripe.Price.retrieve(plan.stripe_price_id)
-                        except stripe.error.InvalidRequestError as price_err:
-                            if "No such price" in str(price_err):
-                                logger.error(f"Price ID {plan.stripe_price_id} for plan '{plan.name}' does not exist in Stripe.")
-                                raise HTTPException(
-                                    status_code=500,
-                                    detail=f"Invalid price configuration for plan '{plan.display_name}'. Please contact support."
-                                )
-                            raise
-                        
-                        # Create checkout session for new subscription
-                        checkout_params = {
-                            "payment_method_types": ["card"],
-                            "line_items": [{"price": plan.stripe_price_id, "quantity": 1}],
-                            "mode": "subscription",
-                            "customer": customer_id,
-                            "success_url": f"{settings.FRONTEND_URL}/",
-                            "cancel_url": f"{settings.FRONTEND_URL}/upgrade",
-                            "metadata": self._build_checkout_metadata(
-                                user_id=str(user.id),
-                                plan_id=str(plan.id),
-                                plan_name=plan.name,
-                                client_ip=client_ip,
-                                client_user_agent=client_user_agent,
-                                fbp=fbp,
-                                fbc=fbc,
-                                ttp=ttp,
-                                ttclid=ttclid,
-                            ),
-                            "subscription_data": {
-                                "metadata": {
-                                    "user_id": str(user.id),
-                                    "plan_id": str(plan.id),
-                                    "plan_name": plan.name,
-                                    "client_ip": client_ip or "",
-                                    "client_user_agent": client_user_agent or "",
-                                    "fbp": fbp or "",
-                                    "fbc": fbc or ""
-                                }
-                            }
-                        }
-                        
-                        # Apply 40% discount coupon for yearly plans
-                        if plan.interval == "year":
-                            checkout_params["discounts"] = [{"coupon": "ruxo40"}]
-                        
-                        try:
-                            checkout_session = stripe.checkout.Session.create(**checkout_params)
-                            logger.info(f"Checkout session created for new subscription (old one didn't exist in Stripe): {checkout_session.id}")
-                            return checkout_session.url
-                        except stripe.error.StripeError as checkout_err:
-                            logger.error(f"Error creating checkout session: {checkout_err}")
-                            raise HTTPException(
-                                status_code=400,
-                                detail=f"Failed to create checkout session: {str(checkout_err)}"
-                            )
-                    else:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Failed to update subscription: {str(e)}"
-                        )
-                except stripe.error.StripeError as e:
-                    logger.error(f"Stripe error updating subscription {existing_subscription.stripe_subscription_id}: {e}")
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Failed to update subscription: {str(e)}"
-                    )
-                
-                # Subscription was successfully updated via Stripe API
-                if existing_subscription:
-                    # Verify the price ID exists in Stripe before creating checkout
-                    try:
-                        stripe.Price.retrieve(plan.stripe_price_id)
-                    except stripe.error.InvalidRequestError as e:
-                        if "No such price" in str(e):
-                            logger.error(f"Price ID {plan.stripe_price_id} for plan '{plan.name}' does not exist in Stripe. Please update the price ID in the database.")
-                            raise HTTPException(
-                                status_code=500,
-                                detail=f"Invalid price configuration for plan '{plan.display_name}'. Please contact support or update the plan's Stripe price ID in the database."
-                            )
-                        raise
-                    
-                    # Apply 40% discount coupon for yearly plans
-                    checkout_params = {
-                        "payment_method_types": ["card"],
-                        "line_items": [{"price": plan.stripe_price_id, "quantity": 1}],
-                        "mode": "subscription",
-                        "customer": customer_id,
-                        "success_url": f"{settings.FRONTEND_URL}/",
-                        "cancel_url": f"{settings.FRONTEND_URL}/upgrade",
-                        "metadata": self._build_checkout_metadata(
-                            user_id=str(user.id),
-                            plan_id=str(plan.id),
-                            plan_name=plan.name,
-                            client_ip=client_ip,
-                            client_user_agent=client_user_agent,
-                            fbp=fbp,
-                            fbc=fbc,
-                            ttp=ttp,
-                            ttclid=ttclid,
-                            is_upgrade="true",
-                            existing_subscription_id=existing_subscription.stripe_subscription_id
-                        ),
-                        "subscription_data": {
-                            "metadata": {
-                                "user_id": str(user.id),
-                                "plan_id": str(plan.id),
-                                "plan_name": plan.name,
-                                "is_upgrade": "true",
-                                "existing_subscription_id": existing_subscription.stripe_subscription_id,
-                                "client_ip": client_ip or "",
-                                "client_user_agent": client_user_agent or "",
-                                "fbp": fbp or "",
-                                "fbc": fbc or ""
-                            }
-                        }
-                    }
-                    
-                    # Apply 40% discount coupon for yearly plans
-                    if plan.interval == "year":
-                        checkout_params["discounts"] = [{"coupon": "ruxo40"}]
-                    
-                    # Create checkout session for the new plan
-                    # Stripe will handle the upgrade and proration
-                    try:
-                        checkout_session = stripe.checkout.Session.create(**checkout_params)
-                        logger.info(f"Checkout session created for upgrade: {checkout_session.id}")
-                        return checkout_session.url
-                    except stripe.error.InvalidRequestError as e:
-                        if "No such price" in str(e):
-                            logger.error(f"Price ID {plan.stripe_price_id} for plan '{plan.name}' does not exist in Stripe.")
-                            raise HTTPException(
-                                status_code=500,
-                                detail=f"Invalid price configuration for plan '{plan.display_name}'. The Stripe price ID '{plan.stripe_price_id}' does not exist. Please update the plan's price ID in the database."
-                            )
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Failed to create upgrade checkout: {str(e)}"
-                        )
-            except HTTPException:
-                raise
-            except stripe.error.StripeError as e:
-                logger.error(f"Stripe error during upgrade checkout creation: {e}")
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Failed to create upgrade checkout: {str(e)}"
-                )
-        
-        # No existing subscription - create new checkout session
+            # PROCEED TO CHECKOUT CREATION
+            # We do NOT cancel the old subscription immediately.
+            # We create a new Checkout Session for the new plan.
+            # When the user pays and the new subscription activates, the webhook logic (in _process_subscription)
+            # will automatically detect and cancel the old subscription ("Single Active Subscription" rule).
+            
+        # No existing subscription (or upgrading) - create new checkout session
         # Note: Webhook secret check is done at webhook endpoint level for security
         # We allow checkout creation here, but webhook will verify signature before processing
         
@@ -415,6 +147,11 @@ class BillingService:
             )
         )
         other_active_subscriptions = result.scalars().all()
+        
+        # If skipping trial or upgrading, don't cancel existing subscriptions immediately (let webhook do it after payment)
+        is_upgrade = existing_subscription is not None
+        if skip_trial or is_upgrade:
+            other_active_subscriptions = []
         
         # Cancel any other active subscriptions IMMEDIATELY to ensure only one active subscription
         for old_sub in other_active_subscriptions:
@@ -458,10 +195,120 @@ class BillingService:
                 )
             raise
         
-        # Apply 40% discount coupon for yearly plans
+        # Get the product for this plan (needed for trial price and discounted price)
+        product_id = None
+        try:
+            plan_price = stripe.Price.retrieve(plan.stripe_price_id)
+            product_id = plan_price.product if isinstance(plan_price.product, str) else plan_price.product.id
+        except Exception as e:
+            logger.warning(f"Could not retrieve plan price to get product ID: {e}")
+        
+        # Create or get trial price ($1 one-time payment)
+        # According to Stripe docs: "Trial periods can be combined with one time prices"
+        # The one-time item will be invoiced immediately at the start of the trial
+        trial_price_id = None
+        if product_id:
+            try:
+                # Check if a trial price already exists for this product (reuse to avoid creating many prices)
+                existing_prices = stripe.Price.list(
+                    product=product_id,
+                    active=True,
+                    limit=100
+                )
+                # Look for existing $1 one-time price
+                for price in existing_prices.data:
+                    if (price.type == 'one_time' and 
+                        price.unit_amount == plan.trial_amount_cents and 
+                        price.currency == 'usd'):
+                        trial_price_id = price.id
+                        logger.info(f"Reusing existing trial price {trial_price_id} for plan {plan.name}")
+                        break
+                
+                # If no existing price found, create a new one
+                if not trial_price_id:
+                    trial_price = stripe.Price.create(
+                        unit_amount=plan.trial_amount_cents,  # $1.00
+                        currency="usd",
+                        product=product_id,
+                    )
+                    trial_price_id = trial_price.id
+                    logger.info(f"Created new trial price {trial_price_id} for plan {plan.name}")
+            except Exception as e:
+                logger.warning(f"Could not create/get trial price, will use subscription trial only: {e}")
+        
+        # For yearly plans, create a discounted price (40% off) to avoid applying discount to trial fee
+        # This way the discount only applies to the subscription, not the $1 trial fee
+        # According to Stripe docs, discounts at checkout level apply to all items, so we pre-discount the subscription price
+        subscription_price_id = plan.stripe_price_id
+        if plan.interval == "year" and trial_price_id and product_id:
+            # Calculate discounted price (40% off = 60% of original)
+            discounted_amount = int(plan.amount_cents * 0.6)
+            try:
+                # Check if a discounted price already exists (reuse to avoid creating many prices)
+                existing_prices = stripe.Price.list(
+                    product=product_id,
+                    active=True,
+                    limit=100
+                )
+                # Look for existing discounted yearly price
+                for price in existing_prices.data:
+                    if (price.type == 'recurring' and 
+                        price.recurring and 
+                        price.recurring.interval == plan.interval and
+                        price.unit_amount == discounted_amount and 
+                        price.currency == 'usd'):
+                        subscription_price_id = price.id
+                        logger.info(f"Reusing existing discounted price {subscription_price_id} for yearly plan {plan.name}")
+                        break
+                
+                # If no existing discounted price found, create a new one
+                if subscription_price_id == plan.stripe_price_id:
+                    discounted_price = stripe.Price.create(
+                        product=product_id,
+                        unit_amount=discounted_amount,
+                        currency="usd",
+                        recurring={
+                            "interval": plan.interval,
+                        },
+                    )
+                    subscription_price_id = discounted_price.id
+                    logger.info(f"Created new discounted price {subscription_price_id} for yearly plan {plan.name} (${discounted_amount/100} instead of ${plan.amount_cents/100})")
+            except Exception as e:
+                logger.warning(f"Could not create/get discounted price, will use original price: {e}")
+                # Fall back to using coupon (which will apply to both, but better than failing)
+        
+        # Build line items: trial fee ($1) + subscription (if not skipping trial)
+        # If skipping trial, only add subscription price
+        line_items = []
+        if not skip_trial and trial_price_id:
+            line_items.append({"price": trial_price_id, "quantity": 1})  # $1 trial fee (charged immediately, no discount)
+        
+        line_items.append({"price": subscription_price_id, "quantity": 1})  # Subscription (with discount already applied if yearly)
+        
+        # Build subscription_data - conditionally include trial_period_days
+        subscription_data = {
+            "metadata": {
+                "user_id": str(user.id),
+                "plan_id": str(plan.id),
+                "plan_name": plan.name,
+                "client_ip": client_ip or "",
+                "client_user_agent": client_user_agent or "",
+                "fbp": fbp or "",
+                "fbc": fbc or "",
+                "ttp": ttp or "",
+                "ttclid": ttclid or ""
+            }
+        }
+        
+        # Only add trial period if not skipping trial
+        if not skip_trial:
+            subscription_data["trial_period_days"] = plan.trial_days  # 3-day trial
+        
+        # Apply 40% discount coupon for yearly plans (only if we didn't create a discounted price)
+        # This applies to all line items, so we avoid it when we have a trial fee
         checkout_params = {
             "payment_method_types": ["card"],
-            "line_items": [{"price": plan.stripe_price_id, "quantity": 1}],
+            "line_items": line_items,
             "mode": "subscription",
             "customer": customer_id,
             "success_url": f"{settings.FRONTEND_URL}/",
@@ -477,21 +324,20 @@ class BillingService:
                 ttp=ttp,
                 ttclid=ttclid,
             ),
-            "subscription_data": {
-                "metadata": {
-                    "user_id": str(user.id),
-                    "plan_id": str(plan.id),
-                    "plan_name": plan.name,
-                    "client_ip": client_ip or "",
-                    "client_user_agent": client_user_agent or "",
-                    "fbp": fbp or "",
-                    "fbc": fbc or ""
-                }
-            }
+            "subscription_data": subscription_data,
         }
         
-        # Apply 40% discount coupon for yearly plans
-        if plan.interval == "year":
+        # Customize button text based on whether skipping trial
+        if not skip_trial:
+            checkout_params["custom_text"] = {
+                "submit": {
+                    "message": "Start trial"
+                }
+            }
+        
+        # Only apply coupon discount if we don't have a trial fee (to avoid discounting the $1 fee)
+        # OR if we couldn't create a discounted price
+        if plan.interval == "year" and not trial_price_id:
             checkout_params["discounts"] = [{"coupon": "ruxo40"}]
         
         try:
@@ -536,8 +382,14 @@ class BillingService:
             # Verify the customer actually exists in Stripe
             try:
                 customer = stripe.Customer.retrieve(existing_sub.stripe_customer_id)
-                logger.info(f"Found existing Stripe customer {existing_sub.stripe_customer_id} for user {user.id} (from subscription)")
-                return existing_sub.stripe_customer_id
+                
+                # Check if customer is marked as deleted in Stripe
+                if hasattr(customer, 'deleted') and customer.deleted:
+                    logger.warning(f"Customer {existing_sub.stripe_customer_id} is marked as deleted in Stripe. Will create new customer.")
+                    # Fall through to email search/creation
+                else:
+                    logger.info(f"Found existing Stripe customer {existing_sub.stripe_customer_id} for user {user.id} (from subscription)")
+                    return existing_sub.stripe_customer_id
             except stripe.error.StripeError as e:
                 # Customer doesn't exist in Stripe, will search by email below
                 logger.warning(f"Customer {existing_sub.stripe_customer_id} not found in Stripe: {e}. Will search by email.")
@@ -673,134 +525,137 @@ class BillingService:
             await self._process_subscription(stripe_subscription, uuid.UUID(user_id))
             
             # Track Purchase event for Facebook Conversions API
-            try:
-                from app.services.facebook_conversions import FacebookConversionsService
-                from app.services.tiktok_conversions import TikTokConversionsService
-                from app.models.user import UserProfile
-                from sqlalchemy.future import select
-                
-                logger.info("=" * 80)
-                logger.info("💰 [PURCHASE TRACKING] Starting Facebook Purchase event tracking")
-                
-                # Get user profile for email
-                result = await self.session.execute(
-                    select(UserProfile).where(UserProfile.id == uuid.UUID(user_id))
-                )
-                user = result.scalar_one_or_none()
-                
-                if user:
-                    # Get plan details for value
-                    plan_name = session.get("metadata", {}).get("plan_name")
-                    plan_result = await self.session.execute(
-                        select(Plan).where(Plan.name == plan_name)
-                    )
-                    plan = plan_result.scalar_one_or_none()
+            # ONLY track if NOT a trial (trials are handled in _grant_trial_credits with StartTrial event)
+            is_trial = stripe_subscription.status == "trialing"
+            if not is_trial:
+                try:
+                    from app.services.facebook_conversions import FacebookConversionsService
+                    from app.services.tiktok_conversions import TikTokConversionsService
+                    from app.models.user import UserProfile
+                    from sqlalchemy.future import select
                     
-                    # Calculate value in dollars
-                    value = 0.0
-                    if plan:
-                        value = plan.amount_cents / 100.0
-                    
-                    # Get amount paid from session (this is the actual amount charged)
-                    amount_total = session.get("amount_total", 0)
-                    if amount_total:
-                        value = amount_total / 100.0
-                    
-                    currency = session.get("currency", "USD").upper()
-                    event_id = session.get("id")  # Use checkout session ID as event_id for deduplication
-                    
-                    # Get tracking context from session metadata (captured at checkout initiation)
-                    metadata = session.get("metadata", {})
-                    client_ip = metadata.get("client_ip")
-                    client_user_agent = metadata.get("client_user_agent")
-                    # Facebook cookies
-                    fbp = metadata.get("fbp")
-                    fbc = metadata.get("fbc")
-                    # TikTok cookies
-                    ttp = metadata.get("ttp")
-                    ttclid = metadata.get("ttclid")
-                    
-                    # FALLBACK 1: Check subscription metadata if session metadata is missing
-                    if not client_ip and stripe_subscription:
-                        sub_metadata = stripe_subscription.get("metadata", {})
-                        if sub_metadata.get("client_ip"):
-                            logger.info(f"💰 [PURCHASE TRACKING] Using tracking context from subscription metadata")
-                            client_ip = sub_metadata.get("client_ip")
-                            client_user_agent = sub_metadata.get("client_user_agent")
-                            fbp = sub_metadata.get("fbp")
-                            fbc = sub_metadata.get("fbc")
-                            ttp = sub_metadata.get("ttp")
-                            ttclid = sub_metadata.get("ttclid")
-                    
-                    # FALLBACK 2: If still missing, use last_checkout_* from user profile
-                    # This handles cases where subscription was modified directly via Stripe API without checkout
-                    if not client_ip and user.last_checkout_ip:
-                        logger.info(f"💰 [PURCHASE TRACKING] Using fallback tracking context from user profile")
-                        client_ip = user.last_checkout_ip
-                        client_user_agent = user.last_checkout_user_agent
-                        fbp = user.last_checkout_fbp
-                        fbc = user.last_checkout_fbc
-                        logger.info(f"💰 [PURCHASE TRACKING] Fallback context age: {datetime.utcnow() - user.last_checkout_timestamp if user.last_checkout_timestamp else 'unknown'}")
-                    
-                    # Extract first and last name from display_name for better event matching
-                    first_name = None
-                    last_name = None
-                    if user.display_name:
-                        name_parts = user.display_name.split(maxsplit=1)
-                        first_name = name_parts[0] if name_parts else None
-                        last_name = name_parts[1] if len(name_parts) > 1 else None
-                    
-                    logger.info(f"💰 [PURCHASE TRACKING] User: {user.email} (ID: {user.id})")
-                    logger.info(f"💰 [PURCHASE TRACKING] Name: {first_name} {last_name}" if first_name else "💰 [PURCHASE TRACKING] Name: Not available")
-                    logger.info(f"💰 [PURCHASE TRACKING] Plan: {plan_name}")
-                    logger.info(f"💰 [PURCHASE TRACKING] Value: ${value} {currency}")
-                    logger.info(f"💰 [PURCHASE TRACKING] Event ID: {event_id}")
-                    logger.info(f"💰 [PURCHASE TRACKING] Event Source URL: {settings.FRONTEND_URL}/")
-                    logger.info(f"💰 [PURCHASE TRACKING] Tracking Context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}...")
-                    logger.info(f"💰 [PURCHASE TRACKING] Facebook Cookies: fbp={fbp}, fbc={fbc}")
-                    logger.info(f"💰 [PURCHASE TRACKING] TikTok Cookies: ttp={ttp}, ttclid={ttclid}")
-                    
-                    conversions_service = FacebookConversionsService()
-                    tiktok_service = TikTokConversionsService()
-                    
-                    # Track purchase (fire and forget - don't block response)
-                    import asyncio
-                    # Facebook tracking
-                    asyncio.create_task(conversions_service.track_purchase(
-                        value=value,
-                        currency=currency,
-                        email=user.email,
-                        first_name=first_name,
-                        last_name=last_name,
-                        external_id=str(user.id),
-                        client_ip=client_ip,
-                        client_user_agent=client_user_agent,
-                        fbp=fbp,
-                        fbc=fbc,
-                        event_source_url=f"{settings.FRONTEND_URL}/",
-                        event_id=event_id,
-                    ))
-                    # TikTok tracking
-                    asyncio.create_task(tiktok_service.track_purchase(
-                        value=value,
-                        currency=currency,
-                        email=user.email,
-                        first_name=first_name,
-                        last_name=last_name,
-                        external_id=str(user.id),
-                        client_ip=client_ip,
-                        client_user_agent=client_user_agent,
-                        event_source_url=f"{settings.FRONTEND_URL}/",
-                        event_id=event_id,
-                        ttp=ttp,
-                        ttclid=ttclid,
-                    ))
-                    logger.info(f"✅ [PURCHASE TRACKING] Purchase event triggered successfully")
                     logger.info("=" * 80)
-                else:
-                    logger.warning(f"⚠️  [PURCHASE TRACKING] User not found: {user_id}")
-            except Exception as e:
-                logger.error(f"❌ [PURCHASE TRACKING] Failed to track Purchase event: {str(e)}", exc_info=True)
+                    logger.info("💰 [PURCHASE TRACKING] Starting Facebook Purchase event tracking")
+                    
+                    # Get user profile for email
+                    result = await self.session.execute(
+                        select(UserProfile).where(UserProfile.id == uuid.UUID(user_id))
+                    )
+                    user = result.scalar_one_or_none()
+                    
+                    if user:
+                        # Get plan details for value
+                        plan_name = session.get("metadata", {}).get("plan_name")
+                        plan_result = await self.session.execute(
+                            select(Plan).where(Plan.name == plan_name)
+                        )
+                        plan = plan_result.scalar_one_or_none()
+                        
+                        # Calculate value in dollars
+                        value = 0.0
+                        if plan:
+                            value = plan.amount_cents / 100.0
+                        
+                        # Get amount paid from session (this is the actual amount charged)
+                        amount_total = session.get("amount_total", 0)
+                        if amount_total:
+                            value = amount_total / 100.0
+                        
+                        currency = session.get("currency", "USD").upper()
+                        event_id = session.get("id")  # Use checkout session ID as event_id for deduplication
+                        
+                        # Get tracking context from session metadata (captured at checkout initiation)
+                        metadata = session.get("metadata", {})
+                        client_ip = metadata.get("client_ip")
+                        client_user_agent = metadata.get("client_user_agent")
+                        # Facebook cookies
+                        fbp = metadata.get("fbp")
+                        fbc = metadata.get("fbc")
+                        # TikTok cookies
+                        ttp = metadata.get("ttp")
+                        ttclid = metadata.get("ttclid")
+                        
+                        # FALLBACK 1: Check subscription metadata if session metadata is missing
+                        if not client_ip and stripe_subscription:
+                            sub_metadata = stripe_subscription.get("metadata", {})
+                            if sub_metadata.get("client_ip"):
+                                logger.info(f"💰 [PURCHASE TRACKING] Using tracking context from subscription metadata")
+                                client_ip = sub_metadata.get("client_ip")
+                                client_user_agent = sub_metadata.get("client_user_agent")
+                                fbp = sub_metadata.get("fbp")
+                                fbc = sub_metadata.get("fbc")
+                                ttp = sub_metadata.get("ttp")
+                                ttclid = sub_metadata.get("ttclid")
+                        
+                        # FALLBACK 2: If still missing, use last_checkout_* from user profile
+                        # This handles cases where subscription was modified directly via Stripe API without checkout
+                        if not client_ip and user.last_checkout_ip:
+                            logger.info(f"💰 [PURCHASE TRACKING] Using fallback tracking context from user profile")
+                            client_ip = user.last_checkout_ip
+                            client_user_agent = user.last_checkout_user_agent
+                            fbp = user.last_checkout_fbp
+                            fbc = user.last_checkout_fbc
+                            logger.info(f"💰 [PURCHASE TRACKING] Fallback context age: {datetime.utcnow() - user.last_checkout_timestamp if user.last_checkout_timestamp else 'unknown'}")
+                        
+                        # Extract first and last name from display_name for better event matching
+                        first_name = None
+                        last_name = None
+                        if user.display_name:
+                            name_parts = user.display_name.split(maxsplit=1)
+                            first_name = name_parts[0] if name_parts else None
+                            last_name = name_parts[1] if len(name_parts) > 1 else None
+                        
+                        logger.info(f"💰 [PURCHASE TRACKING] User: {user.email} (ID: {user.id})")
+                        logger.info(f"💰 [PURCHASE TRACKING] Name: {first_name} {last_name}" if first_name else "💰 [PURCHASE TRACKING] Name: Not available")
+                        logger.info(f"💰 [PURCHASE TRACKING] Plan: {plan_name}")
+                        logger.info(f"💰 [PURCHASE TRACKING] Value: ${value} {currency}")
+                        logger.info(f"💰 [PURCHASE TRACKING] Event ID: {event_id}")
+                        logger.info(f"💰 [PURCHASE TRACKING] Event Source URL: {settings.FRONTEND_URL}/")
+                        logger.info(f"💰 [PURCHASE TRACKING] Tracking Context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}...")
+                        logger.info(f"💰 [PURCHASE TRACKING] Facebook Cookies: fbp={fbp}, fbc={fbc}")
+                        logger.info(f"💰 [PURCHASE TRACKING] TikTok Cookies: ttp={ttp}, ttclid={ttclid}")
+                        
+                        conversions_service = FacebookConversionsService()
+                        tiktok_service = TikTokConversionsService()
+                        
+                        # Track purchase (fire and forget - don't block response)
+                        import asyncio
+                        # Facebook tracking
+                        asyncio.create_task(conversions_service.track_purchase(
+                            value=value,
+                            currency=currency,
+                            email=user.email,
+                            first_name=first_name,
+                            last_name=last_name,
+                            external_id=str(user.id),
+                            client_ip=client_ip,
+                            client_user_agent=client_user_agent,
+                            fbp=fbp,
+                            fbc=fbc,
+                            event_source_url=f"{settings.FRONTEND_URL}/",
+                            event_id=event_id,
+                        ))
+                        # TikTok tracking
+                        asyncio.create_task(tiktok_service.track_purchase(
+                            value=value,
+                            currency=currency,
+                            email=user.email,
+                            first_name=first_name,
+                            last_name=last_name,
+                            external_id=str(user.id),
+                            client_ip=client_ip,
+                            client_user_agent=client_user_agent,
+                            event_source_url=f"{settings.FRONTEND_URL}/",
+                            event_id=event_id,
+                            ttp=ttp,
+                            ttclid=ttclid,
+                        ))
+                        logger.info(f"✅ [PURCHASE TRACKING] Purchase event triggered successfully")
+                        logger.info("=" * 80)
+                    else:
+                        logger.warning(f"⚠️  [PURCHASE TRACKING] User not found: {user_id}")
+                except Exception as e:
+                    logger.error(f"❌ [PURCHASE TRACKING] Failed to track Purchase event: {str(e)}", exc_info=True)
         else:
             logger.warning(f"Checkout completed but no subscription_id for user {user_id}")
 
@@ -818,7 +673,8 @@ class BillingService:
         result = await self.session.execute(
             select(Subscription).where(Subscription.stripe_subscription_id == subscription_id)
         )
-        existing = result.scalar_one_or_none()
+        # Use scalars().first() instead of scalar_one_or_none() to handle potential duplicates gracefully
+        existing = result.scalars().first()
         
         if existing:
             user_id = existing.user_id
@@ -828,7 +684,7 @@ class BillingService:
             result = await self.session.execute(
                 select(Subscription).where(Subscription.stripe_customer_id == customer_id)
             )
-            existing = result.scalar_one_or_none()
+            existing = result.scalars().first()
             if existing:
                 user_id = existing.user_id
                 logger.info(f"Found subscription by customer_id for user {user_id}")
@@ -910,7 +766,9 @@ class BillingService:
                 subscription.plan_name = new_plan.name
             
             # Update subscription status and period
-            subscription.status = subscription_data.get("status")
+            old_status = subscription.status
+            new_status = subscription_data.get("status")
+            subscription.status = new_status
             
             # Safely extract timestamp fields
             period_start_ts = subscription_data.get("current_period_start")
@@ -923,8 +781,161 @@ class BillingService:
             
             subscription.updated_at = datetime.utcnow()
             
-            # Check if we need to reset credits (new billing period) - only if plan didn't change
-            if not (new_plan and new_plan.id != old_plan_id):
+            # Handle trial to active transition - switch to actual plan and grant full credits
+            if old_status == "trialing" and new_status == "active":
+                logger.info(f"Subscription {subscription.stripe_subscription_id} transitioned from trial to active - switching to actual plan")
+                
+                # Get the actual plan from Stripe subscription (not free_trial)
+                # For trial conversions, Stripe usually updates the subscription to the real price ID
+                price_id = subscription_data.get("items", {}).get("data", [{}])[0].get("price", {}).get("id")
+                
+                # If price_id is still missing or looks like trial, try to use plan_id from metadata
+                actual_plan = None
+                
+                # 1. Try fetching plan by price_id
+                if price_id:
+                    plan_result = await self.session.execute(
+                        select(Plan).where(Plan.stripe_price_id == price_id, Plan.name != "free_trial")
+                    )
+                    actual_plan = plan_result.scalar_one_or_none()
+                
+                # 2. If not found (e.g. Stripe hasn't updated items yet or using same price ID), use metadata
+                if not actual_plan:
+                    # Try to get plan from metadata which we store at creation time
+                    plan_id_str = subscription.plan_id
+                    if plan_id_str:
+                        plan_result = await self.session.execute(
+                            select(Plan).where(Plan.id == plan_id_str)
+                        )
+                        current_db_plan = plan_result.scalar_one_or_none()
+                        
+                        # If current plan in DB is NOT free_trial, use it (it's the real plan)
+                        if current_db_plan and current_db_plan.name != "free_trial":
+                            actual_plan = current_db_plan
+                            logger.info(f"Using existing plan from DB: {actual_plan.name}")
+                        
+                        # If it IS free_trial (or null), try to find the real plan from metadata
+                        # (This handles cases where we saved the real plan ID in metadata during checkout)
+                        # BUT we don't have easy access to metadata here unless we fetch from Stripe
+                        # Let's rely on the fact that _process_subscription sets the real plan ID initially
+                
+                if actual_plan:
+                    # Switch from free_trial to actual plan (if needed)
+                    if subscription.plan_id != actual_plan.id:
+                        subscription.plan_id = actual_plan.id
+                        subscription.plan_name = actual_plan.name
+                        self.session.add(subscription)
+                        await self.session.commit()
+                    
+                    # Grant full plan credits (replacing trial credits)
+                    await self._reset_monthly_credits(subscription, skip_webhook_check=True)
+                    logger.info(f"Switched to {actual_plan.name} and granted full plan credits ({actual_plan.credits_per_month}) to user {subscription.user_id} after trial ended")
+                    
+                    # --- TRACK PURCHASE EVENT FOR TRIAL CONVERSION ---
+                    try:
+                        from app.services.facebook_conversions import FacebookConversionsService
+                        from app.services.tiktok_conversions import TikTokConversionsService
+                        from app.models.user import UserProfile
+                        
+                        # Get user profile for email/tracking data
+                        user_result = await self.session.execute(
+                            select(UserProfile).where(UserProfile.id == subscription.user_id)
+                        )
+                        user = user_result.scalar_one_or_none()
+                        
+                        if user:
+                            # Calculate value
+                            value = actual_plan.amount_cents / 100.0
+                            
+                            # Apply 40% discount for yearly plans (just like in create_checkout_session)
+                            if actual_plan.interval == "year":
+                                value = value * 0.6
+                                
+                            currency = "USD" # Default
+                            event_id = f"trial_convert_{subscription.id}_{int(time.time())}"
+                            
+                            # Get tracking context from user profile (saved at checkout)
+                            client_ip = user.last_checkout_ip
+                            client_user_agent = user.last_checkout_user_agent
+                            fbp = user.last_checkout_fbp
+                            fbc = user.last_checkout_fbc
+                            
+                            # Try to get TikTok cookies from subscription metadata (better attribution)
+                            metadata = subscription_data.get("metadata", {})
+                            ttp = metadata.get("ttp")
+                            ttclid = metadata.get("ttclid")
+
+                            # Extract names
+                            first_name = None
+                            last_name = None
+                            if user.display_name:
+                                name_parts = user.display_name.split(maxsplit=1)
+                                first_name = name_parts[0] if name_parts else None
+                                last_name = name_parts[1] if len(name_parts) > 1 else None
+                            
+                            logger.info(f"💰 [TRIAL CONVERSION] Tracking Purchase event for user {user.email}")
+                            logger.info(f"   Plan: {actual_plan.name}, Value: ${value}")
+
+                            fb_service = FacebookConversionsService()
+                            tiktok_service = TikTokConversionsService()
+                            
+                            import asyncio
+                            # Facebook Purchase
+                            asyncio.create_task(fb_service.track_purchase(
+                                value=value,
+                                currency=currency,
+                                email=user.email,
+                                first_name=first_name,
+                                last_name=last_name,
+                                external_id=str(user.id),
+                                client_ip=client_ip,
+                                client_user_agent=client_user_agent,
+                                fbp=fbp,
+                                fbc=fbc,
+                                event_source_url=f"{settings.FRONTEND_URL}/",
+                                event_id=event_id,
+                            ))
+                            
+                            # TikTok Purchase
+                            asyncio.create_task(tiktok_service.track_purchase(
+                                value=value,
+                                currency=currency,
+                                email=user.email,
+                                first_name=first_name,
+                                last_name=last_name,
+                                external_id=str(user.id),
+                                client_ip=client_ip,
+                                client_user_agent=client_user_agent,
+                                event_source_url=f"{settings.FRONTEND_URL}/",
+                                event_id=event_id,
+                                ttp=ttp,
+                                ttclid=ttclid,
+                            ))
+                    except Exception as e:
+                        logger.error(f"❌ [TRIAL CONVERSION] Failed to track Purchase event: {e}", exc_info=True)
+            
+            # Handle trial expiration without conversion - remove credits and cancel
+            if old_status == "trialing" and new_status in ["canceled", "unpaid", "past_due"]:
+                logger.info(f"Subscription {subscription.stripe_subscription_id} trial ended without conversion - removing trial credits")
+                
+                # Remove all trial credits (they expire after 3 days)
+                wallet = await self.credits_service.get_wallet(subscription.user_id)
+                if wallet.balance_credits > 0:
+                    old_balance = wallet.balance_credits
+                    await self.credits_service.spend_credits(
+                        user_id=subscription.user_id,
+                        amount=wallet.balance_credits,
+                        reason="trial_expired",
+                        metadata={
+                            "subscription_id": str(subscription.id),
+                            "old_balance": old_balance,
+                            "trial_ended": True
+                        }
+                    )
+                    logger.info(f"Removed {old_balance} trial credits from user {subscription.user_id} - trial expired without conversion")
+            
+            # Check if we need to reset credits (new billing period) - only if plan didn't change and not transitioning from trial
+            if not (new_plan and new_plan.id != old_plan_id) and not (old_status == "trialing" and new_status == "active"):
                 await self._check_and_reset_credits(subscription)
             
             self.session.add(subscription)
@@ -938,7 +949,11 @@ class BillingService:
                 logger.error(f"Failed to invalidate user cache: {e}")
 
     async def _handle_subscription_deleted(self, subscription_data):
-        """Handle subscription cancellation - removes all user credits."""
+        """Handle subscription cancellation - removes all user credits.
+        
+        If subscription was in trial, this means trial expired without conversion.
+        Trial credits (40) expire after 3 days.
+        """
         import logging
         logger = logging.getLogger(__name__)
         
@@ -949,6 +964,7 @@ class BillingService:
         subscription = result.scalar_one_or_none()
 
         if subscription:
+            was_trial = subscription.status == "trialing"
             subscription.status = "canceled"
             self.session.add(subscription)
             await self.session.commit()
@@ -960,17 +976,39 @@ class BillingService:
             except Exception as e:
                 logger.error(f"Failed to invalidate user cache: {e}")
             
+            # Check if the user has another active subscription
+            # If they do, we should NOT wipe their credits
+            result = await self.session.execute(
+                select(Subscription).where(
+                    Subscription.user_id == subscription.user_id,
+                    Subscription.status.in_(["active", "trialing"]),
+                    Subscription.id != subscription.id
+                )
+            )
+            other_active_subscription = result.scalar_one_or_none()
+            
+            if other_active_subscription:
+                logger.info(f"Subscription {subscription.id} canceled, but user {subscription.user_id} has another active subscription {other_active_subscription.id}. Preserving credits.")
+                return
+
             # Remove all credits when subscription is canceled
+            # If it was a trial, credits expire after 3 days
             wallet = await self.credits_service.get_wallet(subscription.user_id)
             if wallet.balance_credits > 0:
+                reason = "trial_expired" if was_trial else "subscription_canceled"
                 # Spend all remaining credits to bring balance to 0
                 await self.credits_service.spend_credits(
                     user_id=subscription.user_id,
                     amount=wallet.balance_credits,
-                    reason="subscription_canceled",
-                    metadata={"subscription_id": str(subscription.id), "old_balance": wallet.balance_credits}
+                    reason=reason,
+                    metadata={
+                        "subscription_id": str(subscription.id), 
+                        "old_balance": wallet.balance_credits,
+                        "was_trial": was_trial,
+                        "trial_expired": was_trial
+                    }
                 )
-                logger.info(f"Removed all credits ({wallet.balance_credits}) for user {subscription.user_id} due to subscription cancellation")
+                logger.info(f"Removed all credits ({wallet.balance_credits}) for user {subscription.user_id} - {'trial expired' if was_trial else 'subscription canceled'}")
 
     async def _handle_invoice_payment_succeeded(self, invoice_data):
         """Handle successful invoice payment.
@@ -978,18 +1016,175 @@ class BillingService:
         For monthly plans: Invoice is sent monthly, reset credits
         For yearly plans: Invoice is sent yearly, but we still check if monthly reset is needed
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         subscription_id = invoice_data.get("subscription")
-        if not subscription_id:
+        customer_id = invoice_data.get("customer")
+        billing_reason = invoice_data.get("billing_reason")
+        amount_paid = invoice_data.get("amount_paid", 0)
+        invoice_id = invoice_data.get("id")
+        
+        logger.info(f"🧾 [INVOICE HANDLER] Processing invoice {invoice_id} for subscription {subscription_id}")
+        logger.info(f"   Reason: {billing_reason}, Amount: {amount_paid}")
+
+        # Try to find subscription
+        subscription = None
+        
+        # 1. Try by subscription ID if present
+        if subscription_id:
+            result = await self.session.execute(
+                select(Subscription).where(Subscription.stripe_subscription_id == subscription_id)
+            )
+            subscription = result.scalar_one_or_none()
+            
+        # 2. Fallback: Try by customer ID if subscription not found
+        if not subscription and customer_id:
+            logger.info(f"   Subscription ID {subscription_id} missing or not found. Attempting fallback via customer_id: {customer_id}")
+            # Find most recent active/trialing subscription for this customer
+            result = await self.session.execute(
+                select(Subscription).where(
+                    Subscription.stripe_customer_id == customer_id,
+                    Subscription.status.in_(["active", "trialing", "past_due", "incomplete"])
+                ).order_by(Subscription.created_at.desc())
+            )
+            subscription = result.scalars().first()
+        
+        if not subscription:
+            logger.warning(f"   Skipping: Subscription not found for invoice {invoice_id} (sub: {subscription_id}, cust: {customer_id})")
             return
+
+        logger.info(f"   Found subscription {subscription.id}, status: {subscription.status}")
         
-        result = await self.session.execute(
-            select(Subscription).where(Subscription.stripe_subscription_id == subscription_id)
-        )
-        subscription = result.scalar_one_or_none()
-        
-        if subscription and subscription.status == "active":
-            # Use _check_and_reset_credits which handles both monthly and yearly plans correctly
-            await self._check_and_reset_credits(subscription)
+        if subscription and subscription.status in ["active", "trialing", "past_due", "incomplete"]:
+            # Force credit reset on successful payment (user paid -> user gets credits)
+            # This ensures credits are filled up immediately upon payment receipt,
+            # bypassing any potential timing issues with _check_and_reset_credits.
+            logger.info(f"Invoice paid for subscription {subscription.id} (status: {subscription.status}) - forcing credit reset to full plan amount")
+            await self._reset_monthly_credits(subscription, skip_webhook_check=True)
+            
+            # --- TRACK PURCHASE EVENT FOR RENEWALS (Monthly/Yearly) ---
+            # Note: This event fires for every successful invoice payment (renewals)
+            # We want to track this as a Purchase event in ad platforms to optimize for LTV/retention
+            try:
+                # Track ALL successful invoice payments as purchases (renewals, trial conversions, etc.)
+                # Invoice billing_reason: subscription_create, subscription_cycle, subscription_update
+                
+                # DEDUPLICATION FIX: Skip 'subscription_create' because it is already handled by checkout.session.completed
+                # (for non-trials) or _grant_trial_credits (for trials - triggering StartTrial).
+                # We only want to track RECURRING payments (renewals) or manual updates here.
+                if billing_reason == "subscription_create":
+                    logger.info(f"💰 [INVOICE PAYMENT] Skipping Purchase tracking for subscription_create (handled by checkout/trial logic)")
+                else:
+                    # Only track 'subscription_cycle' (renewals) and 'subscription_update' here. 
+                    # 'subscription_create' is handled by checkout.session.completed
+                    # 'subscription_update' might be handled by customer.subscription.updated
+                    # We expand this to track ANY payment that results in money charged
+                    
+                    if amount_paid > 0:
+                        from app.services.facebook_conversions import FacebookConversionsService
+                        from app.services.tiktok_conversions import TikTokConversionsService
+                        from app.models.user import UserProfile
+                        
+                        # Get user
+                        user_result = await self.session.execute(
+                            select(UserProfile).where(UserProfile.id == subscription.user_id)
+                        )
+                        user = user_result.scalar_one_or_none()
+                        
+                        # Get plan for value
+                        plan_result = await self.session.execute(
+                            select(Plan).where(Plan.id == subscription.plan_id)
+                        )
+                        plan = plan_result.scalar_one_or_none()
+                        
+                        if user and plan:
+                            # Calculate value from invoice amount (handles discounts etc.)
+                            value = amount_paid / 100.0
+                            currency = invoice_data.get("currency", "usd").upper()
+                            event_id = f"invoice_{invoice_data.get('id')}"
+                            
+                            # Get tracking context from user profile (best effort)
+                            client_ip = user.last_checkout_ip
+                            client_user_agent = user.last_checkout_user_agent
+                            fbp = user.last_checkout_fbp
+                            fbc = user.last_checkout_fbc
+                            
+                            # Try to get TikTok cookies from subscription metadata (better attribution)
+                            # We need to fetch the subscription from Stripe to get metadata
+                            ttp = None
+                            ttclid = None
+                            try:
+                                stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+                                metadata = stripe_sub.metadata
+                                ttp = metadata.get("ttp")
+                                ttclid = metadata.get("ttclid")
+                                # Also refresh FBP/FBC if available in metadata (might be newer than user profile)
+                                if metadata.get("fbp"): fbp = metadata.get("fbp")
+                                if metadata.get("fbc"): fbc = metadata.get("fbc")
+                                if metadata.get("client_ip"): client_ip = metadata.get("client_ip")
+                                if metadata.get("client_user_agent"): client_user_agent = metadata.get("client_user_agent")
+                            except Exception as e:
+                                logger.warning(f"Could not retrieve subscription metadata for attribution: {e}")
+                            
+                            # Extract names
+                            first_name = None
+                            last_name = None
+                            if user.display_name:
+                                name_parts = user.display_name.split(maxsplit=1)
+                                first_name = name_parts[0] if name_parts else None
+                                last_name = name_parts[1] if len(name_parts) > 1 else None
+                                
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.info(f"💰 [INVOICE PAYMENT] Tracking Purchase event for user {user.email}")
+                            logger.info(f"   Plan: {plan.name}, Value: ${value}")
+                            
+                            fb_service = FacebookConversionsService()
+                            tiktok_service = TikTokConversionsService()
+                            
+                            import asyncio
+                            # Facebook Purchase
+                            asyncio.create_task(fb_service.track_purchase(
+                                value=value,
+                                currency=currency,
+                                email=user.email,
+                                first_name=first_name,
+                                last_name=last_name,
+                                external_id=str(user.id),
+                                client_ip=client_ip,
+                                client_user_agent=client_user_agent,
+                                fbp=fbp,
+                                fbc=fbc,
+                                event_source_url=f"{settings.FRONTEND_URL}/",
+                                event_id=event_id,
+                            ))
+                            
+                            # TikTok Purchase
+                            asyncio.create_task(tiktok_service.track_purchase(
+                                value=value,
+                                currency=currency,
+                                email=user.email,
+                                first_name=first_name,
+                                last_name=last_name,
+                                external_id=str(user.id),
+                                client_ip=client_ip,
+                                client_user_agent=client_user_agent,
+                                event_source_url=f"{settings.FRONTEND_URL}/",
+                                event_id=event_id,
+                                ttp=ttp,
+                                ttclid=ttclid,
+                            ))
+                        else:
+                            logger.warning(f"⚠️  [INVOICE PAYMENT] Missing user or plan for tracking (user found: {bool(user)}, plan found: {bool(plan)})")
+                    else:
+                         logger.info(f"💰 [INVOICE PAYMENT] Skipping tracking: amount_paid is {amount_paid}")
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"❌ [INVOICE PAYMENT] Failed to track Purchase event: {e}", exc_info=True)
+        else:
+             logger.warning(f"⚠️  [INVOICE HANDLER] Subscription {subscription.id if subscription else 'None'} status '{subscription.status if subscription else 'None'}' not in allowed list")
 
     async def _handle_invoice_payment_failed(self, invoice_data):
         """Handle failed invoice payment."""
@@ -1104,23 +1299,58 @@ class BillingService:
         subscription_id = stripe_subscription.get("id")
         customer_id = stripe_subscription.get("customer")
         subscription_status = stripe_subscription.get("status")
+        trial_end = stripe_subscription.get("trial_end")
+        metadata = stripe_subscription.get("metadata", {})
         
         logger.info(f"Processing subscription {subscription_id} for user {user_id}")
+        logger.info(f"  - Status: {subscription_status}")
+        logger.info(f"  - Trial End: {trial_end}")
         
-        # Get plan from Stripe price
-        price_id = stripe_subscription.get("items", {}).get("data", [{}])[0].get("price", {}).get("id")
-        if not price_id:
-            logger.warning(f"No price_id found in subscription {subscription_id}")
-            return
+        # Determine if it's a trial
+        # Trust trial_end timestamp if present and in future, as status might be 'active' or 'incomplete'
+        is_trial = subscription_status == "trialing"
+        if not is_trial and trial_end:
+            try:
+                import time
+                if float(trial_end) > time.time():
+                    is_trial = True
+                    logger.info(f"Subscription has future trial_end ({trial_end}), treating as trial despite status '{subscription_status}'")
+            except (ValueError, TypeError):
+                pass
         
-        # Find plan in database
-        result = await self.session.execute(
-            select(Plan).where(Plan.stripe_price_id == price_id)
-        )
-        plan = result.scalar_one_or_none()
+        # Try to get plan from metadata first (reliable even if price ID changes due to discounts)
+        plan = None
+        plan_id_from_meta = metadata.get("plan_id")
+        
+        if plan_id_from_meta:
+            try:
+                # Import UUID to validate
+                import uuid
+                plan_uuid = uuid.UUID(plan_id_from_meta)
+                result = await self.session.execute(
+                    select(Plan).where(Plan.id == plan_uuid)
+                )
+                plan = result.scalar_one_or_none()
+                if plan:
+                    logger.info(f"Found plan from metadata: {plan.name}")
+            except Exception as e:
+                logger.warning(f"Failed to load plan from metadata ID {plan_id_from_meta}: {e}")
+        
+        # Fallback: Get plan from Stripe price ID
+        if not plan:
+            price_id = stripe_subscription.get("items", {}).get("data", [{}])[0].get("price", {}).get("id")
+            if price_id:
+                # Find plan in database (exclude free_trial - get the actual selected plan)
+                result = await self.session.execute(
+                    select(Plan).where(
+                        Plan.stripe_price_id == price_id,
+                        Plan.name != "free_trial"
+                    )
+                )
+                plan = result.scalar_one_or_none()
         
         if not plan:
-            logger.warning(f"Plan not found for price_id {price_id}")
+            logger.warning(f"Plan not found for subscription {subscription_id}")
             return
         
         logger.info(f"Found plan: {plan.name} with {plan.credits_per_month} credits/month")
@@ -1133,41 +1363,76 @@ class BillingService:
         
         # If this is a new active subscription, cancel any other active subscriptions for this user IMMEDIATELY
         # This ensures users can only have one active subscription at a time
-        if subscription_status in ["active", "trialing"] and (not subscription or subscription.stripe_subscription_id != subscription_id):
-            result = await self.session.execute(
-                select(Subscription).where(
-                    Subscription.user_id == user_id,
-                    Subscription.status.in_(["active", "trialing"]),
-                    Subscription.stripe_subscription_id != subscription_id  # Exclude the current subscription
-                )
-            )
-            existing_active_subscriptions = result.scalars().all()
-            
-            for old_sub in existing_active_subscriptions:
-                logger.info(f"Canceling existing subscription {old_sub.stripe_subscription_id} for user {user_id} immediately to ensure only one active subscription")
+        if subscription_status in ["active", "trialing"]:
+            # 1. STRIPE-SIDE CLEANUP: Query Stripe directly to find and cancel duplicate subscriptions
+            # This handles cases where the local DB is out of sync (e.g. missed webhooks)
+            if customer_id:
                 try:
-                    # Cancel the subscription in Stripe IMMEDIATELY (not at period end)
-                    stripe.Subscription.delete(old_sub.stripe_subscription_id)
-                    # Update status in our database
-                    old_sub.status = "canceled"
-                    old_sub.updated_at = datetime.utcnow()
-                    self.session.add(old_sub)
-                    logger.info(f"Immediately canceled subscription {old_sub.stripe_subscription_id} in Stripe and database")
-                except Exception as stripe_error:
-                    # If subscription is already canceled or doesn't exist, just update our database
-                    error_msg = str(stripe_error)
-                    if "No such subscription" in error_msg or "already been deleted" in error_msg:
-                        logger.info(f"Subscription {old_sub.stripe_subscription_id} already canceled in Stripe. Updating database only.")
-                    else:
-                        logger.warning(f"Stripe error canceling subscription {old_sub.stripe_subscription_id}: {stripe_error}. Updating database only.")
-                    old_sub.status = "canceled"
-                    old_sub.updated_at = datetime.utcnow()
-                    self.session.add(old_sub)
+                    # List all active/trialing subscriptions for this customer from Stripe
+                    # We iterate through all non-canceled ones to be safe
+                    stripe_subs = stripe.Subscription.list(
+                        customer=customer_id,
+                        status="all", 
+                        limit=100
+                    )
+                    
+                    for sub in stripe_subs.data:
+                        # Skip the current subscription we are processing
+                        if sub.id == subscription_id:
+                            continue
+                            
+                        # If it's active or trialing, cancel it immediately
+                        if sub.status in ["active", "trialing"]:
+                            logger.warning(f"Found duplicate active subscription {sub.id} in Stripe, canceling immediately to enforce limit.")
+                            try:
+                                stripe.Subscription.delete(sub.id)
+                                logger.info(f"Successfully canceled duplicate subscription {sub.id}")
+                                
+                                # Update DB if we have a record of it
+                                dup_result = await self.session.execute(
+                                    select(Subscription).where(Subscription.stripe_subscription_id == sub.id)
+                                )
+                                dup_sub = dup_result.scalar_one_or_none()
+                                if dup_sub:
+                                    dup_sub.status = "canceled"
+                                    dup_sub.updated_at = datetime.utcnow()
+                                    self.session.add(dup_sub)
+                            except Exception as e:
+                                logger.error(f"Failed to cancel duplicate subscription {sub.id}: {e}")
                 except Exception as e:
-                    logger.error(f"Error canceling subscription {old_sub.stripe_subscription_id}: {e}")
-            
-            if existing_active_subscriptions:
-                await self.session.commit()
+                    logger.error(f"Error during Stripe-side subscription cleanup: {e}")
+
+            # 2. LOCAL DB CLEANUP: Ensure local DB consistency
+            # (This might be redundant now but good for safety if different customer IDs are linked to same user)
+            if not subscription or subscription.stripe_subscription_id != subscription_id:
+                result = await self.session.execute(
+                    select(Subscription).where(
+                        Subscription.user_id == user_id,
+                        Subscription.status.in_(["active", "trialing"]),
+                        Subscription.stripe_subscription_id != subscription_id  # Exclude the current subscription
+                    )
+                )
+                existing_active_subscriptions = result.scalars().all()
+                
+                for old_sub in existing_active_subscriptions:
+                    logger.info(f"Canceling existing subscription {old_sub.stripe_subscription_id} for user {user_id} immediately to ensure only one active subscription")
+                    try:
+                        # Cancel the subscription in Stripe IMMEDIATELY (not at period end)
+                        try:
+                            stripe.Subscription.delete(old_sub.stripe_subscription_id)
+                        except stripe.error.InvalidRequestError:
+                            pass # Already deleted
+                            
+                        # Update status in our database
+                        old_sub.status = "canceled"
+                        old_sub.updated_at = datetime.utcnow()
+                        self.session.add(old_sub)
+                        logger.info(f"Immediately canceled subscription {old_sub.stripe_subscription_id} in Stripe and database")
+                    except Exception as e:
+                        logger.error(f"Error canceling subscription {old_sub.stripe_subscription_id}: {e}")
+                
+                if existing_active_subscriptions:
+                    await self.session.commit()
         
         # Safely extract timestamp fields (handle None values)
         period_start_ts = stripe_subscription.get("current_period_start")
@@ -1195,22 +1460,31 @@ class BillingService:
         current_period_end = datetime.fromtimestamp(period_end_ts)
         now = datetime.utcnow()
         
+        # Store the actual selected plan - always use the actual plan, even during trial
+        # The trial is just a status, not a different plan
+        actual_plan_id = plan.id
+        actual_plan_name = plan.name
+        # Cache trial credits before commit to avoid lazy loading error (MissingGreenlet)
+        trial_credits_to_grant = plan.trial_credits
+        
         if subscription:
             # Update existing subscription
-            subscription.plan_id = plan.id
-            subscription.plan_name = plan.name
+            # Always use the actual plan (not free_trial) - trial is just a status
+            subscription.plan_id = actual_plan_id
+            subscription.plan_name = actual_plan_name
             subscription.status = stripe_subscription.get("status")
             subscription.current_period_start = current_period_start
             subscription.current_period_end = current_period_end
             subscription.updated_at = now
         else:
             # Create new subscription
+            # Always use the actual plan (not free_trial) - trial is just a status
             subscription = Subscription(
                 user_id=user_id,
-                plan_id=plan.id,
+                plan_id=actual_plan_id,
                 stripe_customer_id=customer_id,
                 stripe_subscription_id=subscription_id,
-                plan_name=plan.name,
+                plan_name=actual_plan_name,
                 status=stripe_subscription.get("status"),
                 current_period_start=current_period_start,
                 current_period_end=current_period_end,
@@ -1220,7 +1494,44 @@ class BillingService:
             )
         
         self.session.add(subscription)
-        await self.session.commit()
+        
+        try:
+            await self.session.commit()
+        except Exception as e:
+            # Handle race condition: Subscription might have been created by another webhook (e.g. customer.subscription.created)
+            # while we were processing this one.
+            if "IntegrityError" in str(type(e).__name__) or "UniqueViolationError" in str(e):
+                logger.warning(f"Race condition detected for subscription {subscription_id}. Retrying update...")
+                await self.session.rollback()
+                
+                # Re-fetch the existing subscription
+                result = await self.session.execute(
+                    select(Subscription).where(Subscription.stripe_subscription_id == subscription_id)
+                )
+                existing_sub = result.scalar_one_or_none()
+                
+                if existing_sub:
+                    # Update the existing record instead
+                    existing_sub.plan_id = actual_plan_id
+                    existing_sub.plan_name = actual_plan_name
+                    existing_sub.status = stripe_subscription.get("status")
+                    existing_sub.current_period_start = current_period_start
+                    existing_sub.current_period_end = current_period_end
+                    existing_sub.updated_at = now
+                    # Only update last_credit_reset if it's a new record logic (optional, but keep consistent)
+                    # existing_sub.last_credit_reset = now 
+                    
+                    self.session.add(existing_sub)
+                    await self.session.commit()
+                    subscription = existing_sub # Update reference
+                    logger.info(f"Successfully recovered from race condition and updated subscription {subscription_id}")
+                else:
+                    # Should not happen if error was UniqueViolation on this ID
+                    logger.error(f"IntegrityError occurred but could not find existing subscription {subscription_id}: {e}")
+                    raise e
+            else:
+                raise e
+
         await self.session.refresh(subscription)
         
         # Invalidate user cache so frontend updates immediately (e.g. hide timer)
@@ -1231,8 +1542,33 @@ class BillingService:
         except Exception as e:
             logger.error(f"Failed to invalidate user cache: {e}")
         
-        # Reset credits to plan amount (monthly reset)
-        await self._reset_monthly_credits(subscription)
+        # Grant credits based on subscription status
+        # If in trial, grant 40 trial credits (plan is already set to free_trial above)
+        if is_trial:
+            logger.info(f"Subscription {subscription_id} is in trial - granting {trial_credits_to_grant} trial credits")
+            
+            # Refresh plan to ensure attributes are loaded (prevents MissingGreenlet error)
+            # The plan object might be expired after the commit above
+            try:
+                await self.session.refresh(plan)
+            except Exception as e:
+                logger.warning(f"Could not refresh plan object, might cause lazy loading error: {e}")
+            
+            # Extract tracking context from subscription metadata
+            tracking_context = {
+                "client_ip": metadata.get("client_ip"),
+                "client_user_agent": metadata.get("client_user_agent"),
+                "fbp": metadata.get("fbp"),
+                "fbc": metadata.get("fbc"),
+                "ttp": metadata.get("ttp"),
+                "ttclid": metadata.get("ttclid"),
+            }
+            
+            # Grant trial credits (40) - use the actual plan's trial_credits setting
+            await self._grant_trial_credits(subscription, plan, tracking_context)
+        else:
+            # Reset credits to plan amount (monthly reset)
+            await self._reset_monthly_credits(subscription)
 
     async def _check_and_reset_credits(self, subscription: Subscription):
         """Check if credits need to be reset based on billing period.
@@ -1242,6 +1578,10 @@ class BillingService:
         """
         import logging
         logger = logging.getLogger(__name__)
+        
+        # Don't reset credits for trial subscriptions - they have fixed trial credits
+        if subscription.status == "trialing":
+            return
         
         if not subscription.last_credit_reset:
             subscription.last_credit_reset = subscription.current_period_start
@@ -1282,10 +1622,21 @@ class BillingService:
             # Also check if at least 30 days have passed (more reliable than just month difference)
             days_since_reset = (now - last_reset).days
             
-            logger.info(f"[YEARLY PLAN CHECK] User {subscription.user_id}: Months: {months_since_reset}, Days: {days_since_reset}, Last reset: {last_reset}, Now: {now}")
+            # Also check if billing period rolled over (new year started)
+            period_start = subscription.current_period_start
+            if period_start.tzinfo is None and last_reset.tzinfo is not None:
+                from datetime import timezone
+                period_start = period_start.replace(tzinfo=timezone.utc)
+            elif period_start.tzinfo is not None and last_reset.tzinfo is None:
+                from datetime import timezone
+                last_reset = last_reset.replace(tzinfo=timezone.utc)
             
-            if months_since_reset >= 1 or days_since_reset >= 30:
-                logger.info(f"[YEARLY PLAN RESET] User {subscription.user_id}: {months_since_reset} month(s) / {days_since_reset} day(s) since last reset, resetting credits")
+            new_billing_period = period_start > last_reset
+            
+            logger.info(f"[YEARLY PLAN CHECK] User {subscription.user_id}: Months: {months_since_reset}, Days: {days_since_reset}, New Period: {new_billing_period}, Last reset: {last_reset}, Now: {now}")
+            
+            if months_since_reset >= 1 or days_since_reset >= 30 or new_billing_period:
+                logger.info(f"[YEARLY PLAN RESET] User {subscription.user_id}: Reset triggered (months: {months_since_reset}, days: {days_since_reset}, new_period: {new_billing_period})")
                 # Skip webhook check for scheduler calls (internal, trusted)
                 await self._reset_monthly_credits(subscription, skip_webhook_check=True)
             else:
@@ -1308,6 +1659,177 @@ class BillingService:
                 logger.info(f"Monthly plan user {subscription.user_id}: new billing period started, resetting credits")
                 # Monthly plans should be handled by webhooks, but allow scheduler as fallback
                 await self._reset_monthly_credits(subscription, skip_webhook_check=True)
+
+    async def _grant_trial_credits(self, subscription: Subscription, plan: Plan, tracking_context: Optional[dict] = None):
+        """Grant trial credits (40) to user during trial period.
+        
+        SECURITY: This method should ONLY be called from verified webhook handlers.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Idempotency check: Check if we already granted trial credits for this subscription
+        # This prevents duplicate events when both checkout.session.completed and customer.subscription.created fire
+        from app.models.credits import CreditTransaction
+        
+        # Check for existing trial_start transaction for this user created in the last minute
+        # or check metadata if possible (harder with JSON)
+        # We'll check for any 'trial_start' transaction for this user associated with this plan recently
+        # Since trial start happens once per subscription, checking user_id + reason='trial_start' + recent time is safe enough
+        # Or better: check if the wallet balance is already equal to trial credits and we just did a transaction
+        
+        # Best approach: Query for recent transaction
+        result = await self.session.execute(
+            select(CreditTransaction).where(
+                CreditTransaction.user_id == subscription.user_id,
+                CreditTransaction.reason == "trial_start",
+                CreditTransaction.created_at > datetime.utcnow() - timedelta(minutes=5)
+            )
+        )
+        existing_tx = result.scalars().first()
+        
+        # Get current wallet to check balance
+        wallet = await self.credits_service.get_wallet(subscription.user_id)
+        
+        # Idempotency: Only skip if we granted credits AND user still has them (or close to it)
+        # This handles cases where credits were accidentally wiped by auth.py race conditions
+        if existing_tx and wallet.balance_credits > 0:
+            logger.info(f"Trial credits already granted for user {subscription.user_id} (tx {existing_tx.id}). Skipping duplicate grant/tracking.")
+            return
+
+        logger.info(f"[TRIAL CREDITS] Granting {plan.trial_credits} trial credits for subscription {subscription.id}, user {subscription.user_id}")
+        
+        # Get current wallet (already fetched above)
+        old_balance = wallet.balance_credits
+        
+        # Set balance to trial credits (replace any existing credits)
+        wallet.balance_credits = plan.trial_credits
+        
+        # Record transaction
+        from app.models.credits import CreditTransaction
+        credit_amount = plan.trial_credits - old_balance
+        transaction = CreditTransaction(
+            user_id=subscription.user_id,
+            amount=abs(credit_amount),
+            direction="credit" if credit_amount > 0 else "debit",
+            reason="trial_start",
+            metadata_json=f'{{"plan_name": "{plan.name}", "old_balance": {old_balance}, "new_balance": {plan.trial_credits}, "trial_credits": {plan.trial_credits}}}'
+        )
+        
+        logger.info(f"[TRIAL CREDITS] Set credits for user {subscription.user_id}: {old_balance} -> {plan.trial_credits} (trial credits for plan: {plan.name})")
+        
+        self.session.add(transaction)
+        self.session.add(wallet)
+        
+        await self.session.commit()
+        logger.info(f"[TRIAL CREDITS] Trial credits granted successfully for user {subscription.user_id}")
+
+        # --- TRIGGER TRACKING EVENTS ---
+        try:
+            from app.models.user import UserProfile
+            from app.services.facebook_conversions import FacebookConversionsService
+            from app.services.tiktok_conversions import TikTokConversionsService
+            
+            # Get user profile for tracking data
+            result = await self.session.execute(
+                select(UserProfile).where(UserProfile.id == subscription.user_id)
+            )
+            user = result.scalar_one_or_none()
+            
+            if user:
+                # Initialize tracking variables
+                client_ip = None
+                client_user_agent = None
+                fbp = None
+                fbc = None
+                ttp = None
+                ttclid = None
+                
+                # 1. Try to use passed tracking_context first (from subscription metadata)
+                if tracking_context:
+                    client_ip = tracking_context.get("client_ip")
+                    client_user_agent = tracking_context.get("client_user_agent")
+                    fbp = tracking_context.get("fbp")
+                    fbc = tracking_context.get("fbc")
+                    ttp = tracking_context.get("ttp")
+                    ttclid = tracking_context.get("ttclid")
+                
+                # 2. Fallback to user profile if missing
+                if not client_ip:
+                    client_ip = user.last_checkout_ip
+                if not client_user_agent:
+                    client_user_agent = user.last_checkout_user_agent
+                if not fbp:
+                    fbp = user.last_checkout_fbp
+                if not fbc:
+                    fbc = user.last_checkout_fbc
+                # Note: UserProfile doesn't have ttp/ttclid yet, so they might remain None if not in tracking_context
+                
+                # Extract names
+                first_name = None
+                last_name = None
+                if user.display_name:
+                    name_parts = user.display_name.split(maxsplit=1)
+                    first_name = name_parts[0] if name_parts else None
+                    last_name = name_parts[1] if len(name_parts) > 1 else None
+                
+                # Calculate value (use $0 for trial start, or $1 if we charge $1)
+                # We charge $1 for trial.
+                value = plan.trial_amount_cents / 100.0
+                
+                # Apply discount if yearly plan (60% of original price for trial amount too if applicable)
+                if plan.interval == "year":
+                    # If trial amount is same as subscription amount (no trial), apply discount
+                    # But usually trial is $1 fixed.
+                    # If plan.trial_amount_cents is > 100 (e.g. full price first month), apply discount
+                    if plan.trial_amount_cents > 100:
+                        value = value * 0.6
+                
+                currency = "USD"
+                event_id = f"start_trial_{subscription.id}_{int(time.time())}"
+                
+                fb_service = FacebookConversionsService()
+                tt_service = TikTokConversionsService()
+                
+                import asyncio
+                # Facebook StartTrial
+                asyncio.create_task(fb_service.track_start_trial(
+                    value=value,
+                    currency=currency,
+                    email=user.email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    external_id=str(user.id),
+                    client_ip=client_ip,
+                    client_user_agent=client_user_agent,
+                    fbp=fbp,
+                    fbc=fbc,
+                    event_source_url=f"{settings.FRONTEND_URL}/upgrade",
+                    event_id=event_id,
+                    content_name=plan.name,
+                    content_ids=[str(plan.id)]
+                ))
+                
+                # TikTok StartTrial (for trial start)
+                asyncio.create_task(tt_service.track_start_trial(
+                    value=value,
+                    currency=currency,
+                    email=user.email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    external_id=str(user.id),
+                    client_ip=client_ip,
+                    client_user_agent=client_user_agent,
+                    event_source_url=f"{settings.FRONTEND_URL}/upgrade",
+                    event_id=event_id,
+                    ttp=ttp, 
+                    ttclid=ttclid
+                ))
+                
+                logger.info(f"✅ [TRIAL TRACKING] StartTrial/Subscribe events triggered for user {user.email}")
+                logger.info(f"   Context: IP={client_ip}, ttp={ttp}, ttclid={ttclid}, fbp={fbp}, fbc={fbc}")
+        except Exception as e:
+            logger.error(f"❌ [TRIAL TRACKING] Failed to track trial start events: {e}", exc_info=True)
 
     async def _reset_monthly_credits(self, subscription: Subscription, skip_webhook_check: bool = False):
         """Reset user's credits to the plan's monthly amount.
@@ -1379,4 +1901,21 @@ class BillingService:
         self.session.add(subscription)
         
         await self.session.commit()
+        
+        # Invalidate credit cache (CRITICAL: otherwise user sees old balance)
+        try:
+            from app.utils.cache import invalidate_cache, cache_key
+            # Invalidate credit cache
+            cache_key_str = cache_key("cache", "user", str(subscription.user_id), "credits")
+            await invalidate_cache(cache_key_str)
+            # Invalidate profile cache (includes credit balance)
+            profile_cache_key = cache_key("cache", "user", str(subscription.user_id), "profile")
+            await invalidate_cache(profile_cache_key)
+            # Invalidate legacy user cache
+            from app.utils.cache import invalidate_user_cache
+            await invalidate_user_cache(str(subscription.user_id))
+            logger.info(f"Invalidated all caches for user {subscription.user_id} after credit reset")
+        except Exception as e:
+            logger.error(f"Failed to invalidate caches after credit reset: {e}")
+            
         logger.info(f"Credits reset successfully for user {subscription.user_id}")

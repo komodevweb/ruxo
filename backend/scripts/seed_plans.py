@@ -34,6 +34,14 @@ stripe.api_key = settings.STRIPE_API_KEY
 # Plan configurations
 PLANS = [
     {
+        "name": "free_trial",
+        "display_name": "Free Trial",
+        "amount_cents": 100,  # $1.00 one-time trial fee (not recurring)
+        "interval": "one_time",  # One-time payment, not a subscription
+        "credits_per_month": 50,  # 50 credits for trial
+        "is_trial_plan": True,  # Special flag for trial plan
+    },
+    {
         "name": "starter_monthly",
         "display_name": "Starter Monthly",
         "amount_cents": 2000,  # $20.00
@@ -103,47 +111,103 @@ async def seed_plans():
                 )
                 existing_plan = result.scalar_one_or_none()
                 
+                # Special handling for free_trial plan (no Stripe price needed)
+                is_trial_plan = plan_config.get("is_trial_plan", False)
+                
                 if existing_plan:
-                    print(f"Plan {plan_config['name']} already exists, skipping...")
-                    continue
+                    if is_trial_plan:
+                        print(f"Trial plan {plan_config['name']} already exists, skipping...")
+                        continue
+                    # Check if the Stripe price ID is valid
+                    price_id_valid = False
+                    try:
+                        stripe.Price.retrieve(existing_plan.stripe_price_id)
+                        price_id_valid = True
+                        # print(f"Plan {plan_config['name']} already exists with valid price ID, updating DB records...")
+                        # continue  # Removed continue to allow DB updates
+                        price_id = existing_plan.stripe_price_id # Reuse existing price ID
+                    except stripe.error.InvalidRequestError:
+                        print(f"Plan {plan_config['name']} exists but price ID is invalid, updating...")
+                        # Price ID is invalid, we'll create a new one and update the plan
+                    except Exception as e:
+                        print(f"Error checking price ID for {plan_config['name']}: {e}, will create new price...")
                 
-                # Create product in Stripe
-                product = stripe.Product.create(
-                    name=plan_config["display_name"],
-                    description=f"{plan_config['credits_per_month']} credits per month",
-                )
+                # For trial plan, create a dummy price ID (not used in Stripe - it's just a DB record)
+                # The $1 is charged as a one-time payment, not a subscription
+                if is_trial_plan:
+                    price_id = f"trial_plan_{plan_config['name']}_one_time"
+                    product_id = None
+                else:
+                    # Create product in Stripe
+                    product = stripe.Product.create(
+                        name=plan_config["display_name"],
+                        description=f"{plan_config['credits_per_month']} credits per month",
+                    )
+                    product_id = product.id
+                    
+                    # Create price in Stripe (use original price, discount applied via coupon at checkout)
+                    price = stripe.Price.create(
+                        product=product.id,
+                        unit_amount=plan_config["amount_cents"],
+                        currency="usd",
+                        recurring={
+                            "interval": plan_config["interval"],
+                        },
+                    )
+                    price_id = price.id
                 
-                # Create price in Stripe (use original price, discount applied via coupon at checkout)
-                price = stripe.Price.create(
-                    product=product.id,
-                    unit_amount=plan_config["amount_cents"],
-                    currency="usd",
-                    recurring={
-                        "interval": plan_config["interval"],
-                    },
-                )
+                if existing_plan:
+                    if is_trial_plan:
+                        # For trial plan, just update credits if needed
+                        existing_plan.credits_per_month = plan_config["credits_per_month"]
+                        existing_plan.trial_credits = 50
+                        session.add(existing_plan)
+                        await session.commit()
+                        print(f"[OK] Updated trial plan: {plan_config['display_name']} - ${plan_config['amount_cents']/100} one-time - {plan_config['credits_per_month']} credits (3-day trial)")
+                    else:
+                        # Update existing plan with new price ID and trial fields
+                        existing_plan.stripe_price_id = price_id
+                        existing_plan.trial_days = 3
+                        existing_plan.trial_amount_cents = 100
+                        existing_plan.trial_credits = 50  # 50 credits for trial
+                        existing_plan.credits_per_month = plan_config["credits_per_month"]
+                        existing_plan.amount_cents = plan_config["amount_cents"]
+                        session.add(existing_plan)
+                        await session.commit()
+                        if is_trial_plan:
+                            print(f"[OK] Updated trial plan: {plan_config['display_name']} - ${plan_config['amount_cents']/100} one-time - {plan_config['credits_per_month']} credits (3-day trial)")
+                        else:
+                            print(f"[OK] Updated plan: {plan_config['display_name']} - ${plan_config['amount_cents']/100}/{plan_config['interval']} - {plan_config['credits_per_month']} credits/month (Trial: 50 credits)")
+                            print(f"  New Stripe Price ID: {price_id}")
+                else:
+                    # Create plan in database
+                    plan = Plan(
+                        id=uuid.uuid4(),
+                        name=plan_config["name"],
+                        display_name=plan_config["display_name"],
+                        stripe_price_id=price_id,
+                        credits_per_month=plan_config["credits_per_month"],
+                        interval=plan_config["interval"],
+                        amount_cents=plan_config["amount_cents"],
+                        currency="usd",
+                        trial_days=3,  # 3-day trial
+                        trial_amount_cents=100,  # $1.00 trial
+                        trial_credits=50,  # 50 credits during trial
+                        is_active=True,
+                        created_at=datetime.utcnow(),
+                    )
+                    
+                    session.add(plan)
+                    await session.commit()
+                    
+                    if is_trial_plan:
+                        print(f"[OK] Created plan: {plan_config['display_name']} - ${plan_config['amount_cents']/100} one-time - {plan_config['credits_per_month']} credits (3-day trial)")
+                    else:
+                        print(f"[OK] Created plan: {plan_config['display_name']} - ${plan_config['amount_cents']/100}/{plan_config['interval']} - {plan_config['credits_per_month']} credits/month")
+                        print(f"  Stripe Price ID: {price_id}")
                 
-                # Create plan in database
-                plan = Plan(
-                    id=uuid.uuid4(),
-                    name=plan_config["name"],
-                    display_name=plan_config["display_name"],
-                    stripe_price_id=price.id,
-                    credits_per_month=plan_config["credits_per_month"],
-                    interval=plan_config["interval"],
-                    amount_cents=plan_config["amount_cents"],
-                    currency="usd",
-                    is_active=True,
-                    created_at=datetime.utcnow(),
-                )
-                
-                session.add(plan)
-                await session.commit()
-                
-                print(f"[OK] Created plan: {plan_config['display_name']} - ${plan_config['amount_cents']/100}/{plan_config['interval']} - {plan_config['credits_per_month']} credits/month")
                 if plan_config["interval"] == "year":
                     print(f"  Note: 40% discount will be applied at checkout via coupon 'ruxo40'")
-                print(f"  Stripe Price ID: {price.id}")
                 
         except Exception as e:
             print(f"Error seeding plans: {e}")

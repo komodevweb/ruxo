@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 class CheckoutSessionCreate(BaseModel):
     plan_name: str  # e.g., "starter_monthly", "pro_yearly", "creator_monthly", "ultimate_monthly"
+    skip_trial: bool = False  # If True, skip trial period and subscribe immediately
 
 class CheckoutSessionResponse(BaseModel):
     url: str

@@ -21,7 +21,11 @@ fb_conversions_logger = logging.getLogger("facebook_conversions_api")
 fb_conversions_logger.setLevel(logging.INFO)
 
 # Create logs directory if it doesn't exist
-log_dir = "/root/ruxo/logs"
+# Determine project root relative to this file (backend/app/services/facebook_conversions.py)
+from pathlib import Path
+backend_dir = Path(__file__).resolve().parent.parent.parent
+project_root = backend_dir.parent
+log_dir = os.path.join(project_root, "logs")
 os.makedirs(log_dir, exist_ok=True)
 
 # Create rotating file handler (max 50MB per file, keep 5 files)
@@ -252,11 +256,11 @@ class FacebookConversionsService:
             }
             
             # Log concise summary to main console (no JSON)
-            logger.info(f"📤 Sending {event_name} event to Facebook Conversions API")
+            logger.info(f"[OUT] Sending {event_name} event to Facebook Conversions API")
             
             # Log full details to dedicated file
             fb_conversions_logger.info("=" * 100)
-            fb_conversions_logger.info(f"📤 OUTGOING REQUEST - {event_name} Event")
+            fb_conversions_logger.info(f"[OUT] OUTGOING REQUEST - {event_name} Event")
             fb_conversions_logger.info(f"URL: {self.api_url}/{self.pixel_id}/events")
             fb_conversions_logger.info(f"HTTP Method: POST")
             fb_conversions_logger.info(f"Request Payload:")
@@ -272,11 +276,11 @@ class FacebookConversionsService:
                 
                 # Log concise response to main console (no JSON)
                 events_received = result.get("events_received", 0)
-                logger.info(f"📥 Facebook response: {response.status_code} - {events_received} event(s) received")
+                logger.info(f"[IN] Facebook response: {response.status_code} - {events_received} event(s) received")
                 
                 # Log full response to dedicated file
                 fb_conversions_logger.info("=" * 100)
-                fb_conversions_logger.info(f"📥 INCOMING RESPONSE - {event_name} Event")
+                fb_conversions_logger.info(f"[IN] INCOMING RESPONSE - {event_name} Event")
                 fb_conversions_logger.info(f"HTTP Status Code: {response.status_code}")
                 fb_conversions_logger.info(f"Response Headers: {dict(response.headers)}")
                 fb_conversions_logger.info(f"Response Body:")
@@ -299,10 +303,10 @@ class FacebookConversionsService:
                 # Check events_received
                 events_received_check = result.get("events_received", 0)
                 if events_received_check > 0:
-                    logger.info(f"✅ {event_name} event successfully sent")
+                    logger.info(f"[SUCCESS] {event_name} event successfully sent")
                     return True
                 else:
-                    logger.warning(f"⚠️  Facebook received 0 events for {event_name}")
+                    logger.warning(f"[WARNING] Facebook received 0 events for {event_name}")
                     return False
                     
         except httpx.HTTPStatusError as e:
@@ -603,6 +607,65 @@ class FacebookConversionsService:
         
         return await self.send_event(
             event_name="AddToCart",
+            user_data=user_data,
+            event_data=event_data,
+            custom_data=custom_data if custom_data else None,
+            event_id=event_id,
+        )
+
+    async def track_start_trial(
+        self,
+        value: float,
+        currency: str = "USD",
+        email: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        external_id: Optional[str] = None,
+        client_ip: Optional[str] = None,
+        client_user_agent: Optional[str] = None,
+        fbp: Optional[str] = None,
+        fbc: Optional[str] = None,
+        event_source_url: Optional[str] = None,
+        event_id: Optional[str] = None,
+        content_name: Optional[str] = None,
+        content_ids: Optional[List[str]] = None,
+    ) -> bool:
+        """
+        Track StartTrial event.
+        
+        Sends all Facebook-recommended parameters including:
+        - User data: email, first/last name, external_id, client_ip, user_agent, fbp, fbc
+        - Custom data: value, currency, content_name, content_ids
+        - Event data: event_source_url
+        - Event ID: for deduplication
+        
+        All PII (email, names) are automatically SHA-256 hashed before sending.
+        """
+        user_data = self._get_user_data(
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            external_id=external_id,
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            fbp=fbp,
+            fbc=fbc,
+        )
+        
+        event_data = self._get_event_data(
+            event_source_url=event_source_url,
+        )
+        
+        custom_data = self._get_custom_data(
+            currency=currency,
+            value=value,
+            content_name=content_name,
+            content_ids=content_ids,
+            content_type="product", 
+        )
+        
+        return await self.send_event(
+            event_name="StartTrial",
             user_data=user_data,
             event_data=event_data,
             custom_data=custom_data if custom_data else None,

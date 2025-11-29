@@ -16,12 +16,27 @@ from supabase import create_client, Client
 from app.core.config import settings
 import logging
 import secrets
+import uuid
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
 router = APIRouter()
 security = HTTPBearer()
 logger = logging.getLogger(__name__)
+
+async def _ensure_no_credits_without_plan(wallet, user_id: uuid.UUID, session: AsyncSession):
+    """Ensure users without an active plan have no credits."""
+    if wallet.balance_credits > 0:
+        logger.info(f"User {user_id} has {wallet.balance_credits} credits but no active subscription - removing credits")
+        # Reset credits to 0
+        wallet.balance_credits = 0
+        session.add(wallet)
+        await session.commit()
+        
+        # Invalidate credit cache
+        from app.utils.cache import invalidate_cache, cache_key
+        cache_key_str_credits = cache_key("cache", "user", str(user_id), "credits")
+        await invalidate_cache(cache_key_str_credits)
 
 # Initialize Supabase client for auth operations
 supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
@@ -247,7 +262,7 @@ async def signup(
         result = await session.execute(
             select(Subscription).where(
                 Subscription.user_id == user_id,
-                Subscription.status == "active"
+                Subscription.status.in_(["active", "trialing"])
             )
         )
         subscription = result.scalar_one_or_none()
@@ -483,7 +498,7 @@ async def login(
         result = await session.execute(
             select(Subscription).where(
                 Subscription.user_id == user_id,
-                Subscription.status == "active"
+                Subscription.status.in_(["active", "trialing"])
             )
         )
         subscription = result.scalar_one_or_none()
@@ -697,30 +712,37 @@ async def read_users_me(
     plan_name = None
     plan_interval = None
     credits_per_month = None
+    subscription_status = None
     
     result = await session.execute(
         select(Subscription).where(
             Subscription.user_id == current_user.id,
-            Subscription.status == "active"
+            Subscription.status.in_(["active", "trialing"])
         )
     )
     subscription = result.scalar_one_or_none()
     
-    if subscription and subscription.plan_id:
-        plan_result = await session.execute(
-            select(Plan).where(Plan.id == subscription.plan_id)
-        )
-        plan = plan_result.scalar_one_or_none()
-        if plan:
-            plan_name = plan.display_name  # Use display_name for user-friendly display
-            plan_interval = plan.interval
-            credits_per_month = plan.credits_per_month
+    if subscription:
+        subscription_status = subscription.status
+        if subscription.plan_id:
+            plan_result = await session.execute(
+                select(Plan).where(Plan.id == subscription.plan_id)
+            )
+            plan = plan_result.scalar_one_or_none()
+            if plan:
+                plan_name = plan.display_name  # Use display_name for user-friendly display
+                plan_interval = plan.interval
+                credits_per_month = plan.credits_per_month
+    else:
+        # User has no active subscription - ensure they have no credits
+        await _ensure_no_credits_without_plan(wallet, current_user.id, session)
     
     user_data = UserMe(
         **current_user.model_dump(),
         credit_balance=wallet.balance_credits,
         plan_name=plan_name,
         plan_interval=plan_interval,
+        subscription_status=subscription_status,
         credits_per_month=credits_per_month
     )
     
@@ -761,30 +783,34 @@ async def update_user_profile(
     plan_name = None
     plan_interval = None
     credits_per_month = None
+    subscription_status = None
     
     result = await session.execute(
         select(Subscription).where(
             Subscription.user_id == current_user.id,
-            Subscription.status == "active"
+            Subscription.status.in_(["active", "trialing"])
         )
     )
     subscription = result.scalar_one_or_none()
     
-    if subscription and subscription.plan_id:
-        plan_result = await session.execute(
-            select(Plan).where(Plan.id == subscription.plan_id)
-        )
-        plan = plan_result.scalar_one_or_none()
-        if plan:
-            plan_name = plan.display_name  # Use display_name for user-friendly display
-            plan_interval = plan.interval
-            credits_per_month = plan.credits_per_month
+    if subscription:
+        subscription_status = subscription.status
+        if subscription.plan_id:
+            plan_result = await session.execute(
+                select(Plan).where(Plan.id == subscription.plan_id)
+            )
+            plan = plan_result.scalar_one_or_none()
+            if plan:
+                plan_name = plan.display_name  # Use display_name for user-friendly display
+                plan_interval = plan.interval
+                credits_per_month = plan.credits_per_month
     
     return UserMe(
         **current_user.model_dump(),
         credit_balance=wallet.balance_credits,
         plan_name=plan_name,
         plan_interval=plan_interval,
+        subscription_status=subscription_status,
         credits_per_month=credits_per_month
     )
 
@@ -1042,7 +1068,7 @@ async def oauth_exchange(
                 select(Subscription).where(
                     and_(
                         Subscription.user_id == user_id,
-                        Subscription.status == "active"
+                        Subscription.status.in_(["active", "trialing"])
                     )
                 )
             )
@@ -1345,7 +1371,7 @@ async def oauth_callback_post(
         result = await session.execute(
             select(Subscription).where(
                 Subscription.user_id == user_id,
-                Subscription.status == "active"
+                Subscription.status.in_(["active", "trialing"])
             )
         )
         subscription = result.scalar_one_or_none()

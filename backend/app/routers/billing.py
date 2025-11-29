@@ -116,7 +116,7 @@ async def get_plans(
     """Get all active subscription plans (cached in Redis for 1 hour)."""
     from app.utils.cache import get_cached, set_cached, cache_key
     
-    cache_key_str = cache_key("cache", "billing", "plans")
+    cache_key_str = cache_key("cache", "billing", "plans_v2")
     
     # Try Redis cache first
     cached = await get_cached(cache_key_str)
@@ -127,8 +127,12 @@ async def get_plans(
         return cached
     
     # Cache miss - fetch from database
+    # Exclude free_trial plan from list (it's assigned automatically during trial, not selectable)
     result = await session.execute(
-        select(Plan).where(Plan.is_active == True).order_by(Plan.amount_cents)
+        select(Plan).where(
+            Plan.is_active == True,
+            Plan.name != "free_trial"
+        ).order_by(Plan.amount_cents)
     )
     plans = result.scalars().all()
     
@@ -148,6 +152,11 @@ async def get_plans(
             original_amount_cents = None
             original_amount_dollars = None
         
+        # Format interval display - handle one_time specially
+        interval_display = plan.interval
+        if plan.interval == "one_time":
+            interval_display = "one-time"
+        
         plans_data.append({
             "id": str(plan.id),
             "name": plan.name,
@@ -157,8 +166,13 @@ async def get_plans(
             "original_amount_cents": original_amount_cents,
             "original_amount_dollars": original_amount_dollars,
             "interval": plan.interval,
+            "interval_display": interval_display,
             "credits_per_month": plan.credits_per_month,
             "currency": plan.currency,
+            "trial_days": getattr(plan, "trial_days", 0),
+            "trial_amount_cents": getattr(plan, "trial_amount_cents", 0),
+            "trial_amount_dollars": getattr(plan, "trial_amount_cents", 0) / 100.0,
+            "trial_credits": getattr(plan, "trial_credits", 0),
         })
     
     # Cache in Redis for 1 hour
@@ -380,7 +394,10 @@ async def track_add_to_cart(
         
         # Generate event_id for deduplication
         import time
-        event_id = f"addtocart_{int(time.time())}_{current_user.id if current_user else 'anonymous'}"
+        # Use 5-second window for deduplication to handle rapid-fire requests (double clicks, etc.)
+        # This groups requests happening within the same 5s window into the same event ID
+        time_window = int(time.time()) // 5
+        event_id = f"addtocart_{time_window}_{current_user.id if current_user else 'anonymous'}"
         
         # Track event (fire and forget)
         import asyncio
@@ -478,4 +495,199 @@ async def test_purchase(
     except Exception as e:
         logger.error(f"Failed to test Purchase event: {str(e)}", exc_info=True)
         return {"status": "error", "message": str(e)}
+
+@router.post("/sync-subscription")
+async def sync_subscription(
+    current_user: UserProfile = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Manually sync subscription status from Stripe.
+    Useful if webhooks fail or are delayed.
+    """
+    try:
+        import stripe
+        
+        # Find customer ID
+        customer_id = current_user.stripe_customer_id
+        if not customer_id:
+            # Try to find by email
+            customers = stripe.Customer.list(email=current_user.email, limit=1)
+            if customers.data:
+                customer_id = customers.data[0].id
+                # Update user
+                current_user.stripe_customer_id = customer_id
+                session.add(current_user)
+                await session.commit()
+        
+        if not customer_id:
+             return {"status": "no_customer", "message": "No Stripe customer found"}
+
+        # Get subscriptions
+        subscriptions = stripe.Subscription.list(
+            customer=customer_id, 
+            status="all", 
+            limit=5
+        )
+        
+        active_or_trialing = [s for s in subscriptions.data if s.status in ["active", "trialing"]]
+        
+        if not active_or_trialing:
+            # No active subscriptions
+            return {"status": "no_subscription", "message": "No active or trialing subscriptions found in Stripe"}
+            
+        # Process each active/trialing subscription
+        service = BillingService(session)
+        synced_count = 0
+        for sub in active_or_trialing:
+            await service._process_subscription(sub, current_user.id)
+            synced_count += 1
+            
+        return {"status": "success", "message": f"Synced {synced_count} subscription(s)", "synced_count": synced_count}
+        
+    except Exception as e:
+        logger.error(f"Failed to sync subscription: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/skip-trial-and-subscribe")
+async def skip_trial_and_subscribe(
+    request: Request,
+    current_user: UserProfile = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Skip the trial period and subscribe to the full plan immediately.
+    
+    This endpoint:
+    1. Finds the user's active trial subscription
+    2. Gets the plan they selected from Stripe subscription metadata
+    3. Creates a checkout session with skip_trial=true for that plan
+    4. Returns the checkout URL - when user completes checkout, old trial will be cancelled
+    """
+    try:
+        import stripe
+        from app.models.billing import Subscription, Plan
+        
+        # Find user's trial subscription
+        result = await session.execute(
+            select(Subscription).where(
+                Subscription.user_id == current_user.id,
+                Subscription.status.in_(["trialing", "active"])
+            )
+        )
+        subscriptions = result.scalars().all()
+        
+        # Find a trial subscription
+        trial_subscription = None
+        for sub in subscriptions:
+            if sub.status == "trialing":
+                trial_subscription = sub
+                break
+            elif sub.plan_name and ("trial" in sub.plan_name.lower() or sub.plan_name.lower() == "free_trial"):
+                trial_subscription = sub
+                break
+        
+        if not trial_subscription:
+            logger.info(f"No trial subscription found in DB for user {current_user.id}. Checking Stripe directly...")
+            
+            # Fallback: Check Stripe directly for active subscriptions
+            try:
+                customers = stripe.Customer.list(email=current_user.email, limit=1)
+                if customers.data:
+                    customer_id = customers.data[0].id
+                    subs = stripe.Subscription.list(customer=customer_id, status="trialing", limit=1)
+                    if not subs.data:
+                        subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
+                    
+                    if subs.data:
+                        stripe_sub = subs.data[0]
+                        logger.info(f"Found subscription in Stripe: {stripe_sub.id}")
+                        
+                        class TempSub:
+                            stripe_subscription_id = stripe_sub.id
+                        trial_subscription = TempSub()
+            except Exception as e:
+                logger.error(f"Error checking Stripe directly: {e}")
+
+        if not trial_subscription:
+            logger.info(f"No trial subscription found anywhere for user {current_user.id}")
+            raise HTTPException(
+                status_code=400, 
+                detail="You don't have an active trial subscription. Please start a trial first."
+            )
+        
+        logger.info(f"Using subscription ID: {trial_subscription.stripe_subscription_id}")
+        
+        # Get the subscription from Stripe to find the actual plan
+        try:
+            stripe_sub = stripe.Subscription.retrieve(trial_subscription.stripe_subscription_id)
+        except stripe.error.StripeError as e:
+            logger.error(f"Failed to retrieve Stripe subscription: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to retrieve subscription from Stripe. Please try again."
+            )
+        
+        # Get the actual plan name from subscription metadata
+        actual_plan_name = stripe_sub.metadata.get("plan_name")
+        
+        if not actual_plan_name:
+            # Fallback: Get from price ID
+            if not stripe_sub.items.data:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Subscription has no items. Please contact support."
+                )
+            
+            price_id = stripe_sub.items.data[0].price.id
+            
+            plan_result = await session.execute(
+                select(Plan).where(
+                    Plan.stripe_price_id == price_id,
+                    Plan.name != "free_trial"
+                )
+            )
+            plan = plan_result.scalar_one_or_none()
+            if plan:
+                actual_plan_name = plan.name
+        
+        if not actual_plan_name:
+            raise HTTPException(
+                status_code=404,
+                detail="Could not find the plan for your subscription. Please contact support."
+            )
+        
+        # Get tracking context
+        client_ip = get_client_ip(request)
+        client_user_agent = request.headers.get("user-agent")
+        fbp = request.cookies.get("_fbp")
+        fbc = request.cookies.get("_fbc")
+        ttp = request.cookies.get("_ttp")
+        ttclid = request.cookies.get("_ttclid")
+        
+        # Create checkout session with skip_trial=true
+        service = BillingService(session)
+        url = await service.create_checkout_session(
+            user=current_user,
+            plan_name=actual_plan_name,
+            skip_trial=True,
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            fbp=fbp,
+            fbc=fbc,
+            ttp=ttp,
+            ttclid=ttclid,
+        )
+        
+        logger.info(f"Created skip-trial checkout for user {current_user.id}, plan {actual_plan_name}")
+        
+        return {
+            "status": "success",
+            "url": url,
+            "plan_name": actual_plan_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create skip-trial checkout for user {current_user.id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create checkout: {str(e)}")
 

@@ -1,10 +1,12 @@
 import stripe
 import logging
 import time
-from fastapi import APIRouter, Request, Depends, Header, HTTPException
+import asyncio
+from fastapi import APIRouter, Request, Depends, Header, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.services.billing_service import BillingService
-from app.db.session import get_session
+from app.db.session import get_session, async_session_maker
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.models.user import UserProfile
@@ -12,63 +14,71 @@ from app.models.user import UserProfile
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Set Stripe API key
+stripe.api_key = settings.STRIPE_API_KEY
+
+
+async def process_webhook_event(event: dict):
+    """Process webhook event in background - handles all DB operations."""
+    try:
+        async with async_session_maker() as session:
+            service = BillingService(session)
+            await service.handle_webhook(event)
+            logger.info(f"✅ Successfully processed webhook: {event['type']} (id: {event.get('id')})")
+    except Exception as e:
+        logger.error(f"❌ Error processing webhook {event['type']}: {e}", exc_info=True)
+
+
 @router.post("/stripe")
 async def stripe_webhook(
     request: Request,
-    session: AsyncSession = Depends(get_session)
+    background_tasks: BackgroundTasks,
 ):
     """
     Stripe webhook endpoint.
     
     SECURITY: This endpoint verifies the webhook signature before processing.
     If signature verification fails, NO plans or credits will be granted.
+    
+    Per Stripe docs: Returns 200 immediately, processes in background.
+    https://docs.stripe.com/webhooks#receive-events
     """
     payload = await request.body()
     
-    # Get the Stripe signature from headers (Stripe sends it as 'stripe-signature')
+    # Get the Stripe signature from headers
     stripe_signature = request.headers.get("stripe-signature")
     
     if not stripe_signature:
-        logger.error("SECURITY: Missing stripe-signature header - rejecting webhook")
-        raise HTTPException(status_code=400, detail="Missing stripe-signature header")
+        logger.error("❌ SECURITY: Missing stripe-signature header - rejecting webhook")
+        return JSONResponse(status_code=400, content={"error": "Missing stripe-signature header"})
     
     if not settings.STRIPE_WEBHOOK_SECRET or settings.STRIPE_WEBHOOK_SECRET.strip() == "":
-        logger.error("SECURITY: STRIPE_WEBHOOK_SECRET is not configured or is empty - rejecting webhook")
-        logger.error("SECURITY: NO credits or subscriptions will be granted without a valid webhook secret")
-        raise HTTPException(
-            status_code=500,
-            detail="Webhook secret not configured - credits and subscriptions cannot be granted"
-        )
+        logger.error("❌ SECURITY: STRIPE_WEBHOOK_SECRET is not configured - rejecting webhook")
+        return JSONResponse(status_code=500, content={"error": "Webhook secret not configured"})
     
     # CRITICAL: Verify signature BEFORE processing anything
-    # If verification fails, we return immediately without processing
     try:
         event = stripe.Webhook.construct_event(
             payload, stripe_signature, settings.STRIPE_WEBHOOK_SECRET
         )
-        logger.info(f"Webhook signature verified: {event['type']} (id: {event.get('id')})")
+        logger.info(f"✅ Webhook signature verified: {event['type']} (id: {event.get('id')})")
     except ValueError as e:
-        logger.error(f"SECURITY: Invalid webhook payload - rejecting: {e}")
-        # Return 400 without processing - no plans/credits granted
-        raise HTTPException(status_code=400, detail=f"Invalid payload: {str(e)}")
+        logger.error(f"❌ Invalid webhook payload: {e}")
+        return JSONResponse(status_code=400, content={"error": f"Invalid payload: {str(e)}"})
     except stripe.error.SignatureVerificationError as e:
-        logger.error(f"SECURITY: Invalid webhook signature - REJECTING WEBHOOK: {e}")
-        logger.error(f"SECURITY: This webhook will NOT grant any plans or credits")
-        # Return 400 without processing - no plans/credits granted
-        raise HTTPException(status_code=400, detail=f"Invalid signature: {str(e)}")
+        logger.error(f"❌ SECURITY: Invalid webhook signature - REJECTING: {e}")
+        return JSONResponse(status_code=400, content={"error": f"Invalid signature: {str(e)}"})
 
-    # Only process if signature is verified
-    try:
-        service = BillingService(session)
-        await service.handle_webhook(event)
-        logger.info(f"Successfully processed verified webhook: {event['type']}")
-    except Exception as e:
-        logger.error(f"Error processing webhook {event['type']}: {e}", exc_info=True)
-        # Rollback any partial changes
-        await session.rollback()
-        raise HTTPException(status_code=500, detail=f"Error processing webhook: {str(e)}")
+    # Per Stripe docs: Return 200 IMMEDIATELY, process in background
+    # This prevents timeouts and ensures Stripe knows we received the event
+    logger.info(f"📥 Received webhook: {event['type']} - processing in background...")
     
-    return {"status": "success"}
+    # Add to background tasks for async processing
+    background_tasks.add_task(process_webhook_event, event)
+    
+    # Return 200 immediately - Stripe will not retry
+    return JSONResponse(status_code=200, content={"status": "received", "event_type": event['type']})
+
 
 @router.post("/supabase-auth")
 async def supabase_auth_webhook(
@@ -125,7 +135,6 @@ async def supabase_auth_webhook(
                             last_name = name_parts[1] if len(name_parts) > 1 else None
                         
                         # Generate unique event_id for deduplication
-                        import asyncio
                         event_id = f"registration_{user_profile.id}_{int(time.time())}"
                         
                         logger.info(f"🎯 Triggering CompleteRegistration for verified user: {user_profile.email} (event_id: {event_id})")
@@ -157,4 +166,3 @@ async def supabase_auth_webhook(
         logger.error(f"Error processing Supabase auth webhook: {str(e)}", exc_info=True)
         # Return 200 anyway so Supabase doesn't retry
         return {"status": "error", "message": str(e)}
-

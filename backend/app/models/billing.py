@@ -18,6 +18,11 @@ class Plan(SQLModel, table=True):
     amount_cents: int # price in cents for display
     currency: str = "usd"
     
+    # Trial period configuration
+    trial_days: int = Field(default=3) # Trial period in days (default 3 days)
+    trial_amount_cents: int = Field(default=100) # Trial price in cents (default $1.00)
+    trial_credits: int = Field(default=60) # Credits during trial period (default 60)
+    
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
