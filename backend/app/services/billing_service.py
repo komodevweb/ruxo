@@ -1788,14 +1788,14 @@ class BillingService:
                         value = value * 0.6
                 
                 currency = "USD"
-                event_id = f"start_trial_{subscription.id}_{int(time.time())}"
+                event_id = f"purchase_{subscription.id}_{int(time.time())}"
                 
                 fb_service = FacebookConversionsService()
                 tt_service = TikTokConversionsService()
                 
                 import asyncio
-                # Facebook StartTrial
-                asyncio.create_task(fb_service.track_start_trial(
+                # Facebook Purchase (Track trial charge as purchase)
+                asyncio.create_task(fb_service.track_purchase(
                     value=value,
                     currency=currency,
                     email=user.email,
@@ -1812,7 +1812,7 @@ class BillingService:
                     content_ids=[str(plan.id)]
                 ))
                 
-                # TikTok StartTrial (for trial start)
+                # TikTok Purchase (Track trial charge as purchase)
                 # Get tracking from user profile as fallback if not in context
                 if not ttp and user.signup_ttp:
                     ttp = user.signup_ttp
@@ -1823,7 +1823,7 @@ class BillingService:
                 if not ttclid and user.last_checkout_ttclid:
                     ttclid = user.last_checkout_ttclid
                     
-                asyncio.create_task(tt_service.track_start_trial(
+                asyncio.create_task(tt_service.track_purchase(
                     value=value,
                     currency=currency,
                     email=user.email,
