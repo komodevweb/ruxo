@@ -571,7 +571,7 @@ function Page() {
                     
                     // Check for any pending/running jobs and automatically show overlay
                     const runningJob = data.jobs.find((job: any) => 
-                         (job.status === "pending" || job.status === "running") && !job.output_url
+                         (job.status === "pending" || job.status === "running" || job.status === "processing" || (job.status === "completed" && !job.output_url)) && !job.output_url
                     );
                     
                     if (runningJob) {
@@ -610,6 +610,25 @@ function Page() {
                               setIsPolling(true);
                               pollJobStatus(runningJobId);
                          }
+                    } else if (data.jobs.length > 0 && !selectedJob && !outputUrl && !isGenerating && !isPolling && !jobId) {
+                         // If no running job, no selection, and we're in initial state, check for recent completed job
+                         const mostRecentJob = data.jobs[0];
+                         const jobTime = new Date(mostRecentJob.created_at).getTime();
+                         const now = Date.now();
+                         
+                         // Only auto-select if created within last 5 minutes
+                         if (now - jobTime < 5 * 60 * 1000) {
+                              console.log("🔄 Auto-selecting recent job:", mostRecentJob.job_id);
+                              if (mostRecentJob.status === "completed" && mostRecentJob.output_url) {
+                                   setOutputUrl(mostRecentJob.output_url);
+                                   setSelectedJob(mostRecentJob);
+                                   setJobStatus("completed");
+                              } else if (mostRecentJob.status === "failed") {
+                                   setSelectedJob(mostRecentJob);
+                                   setJobStatus("failed");
+                                   setError(mostRecentJob.error || "Generation failed");
+                              }
+                         }
                     } else if (jobId) {
                          // Check specific job if jobId is set
                          const currentJob = data.jobs.find((job: any) => job.job_id === jobId);
@@ -627,7 +646,7 @@ function Page() {
                                    }
                               }
                               
-                              if ((currentJob.status === "pending" || currentJob.status === "running") && !currentJob.output_url) {
+                              if ((currentJob.status === "pending" || currentJob.status === "running" || currentJob.status === "processing" || (currentJob.status === "completed" && !currentJob.output_url)) && !currentJob.output_url) {
                                    // Resume generating state and polling only if not already generating
                                    if (!isGenerating) {
                                         setIsGenerating(true);
@@ -1101,12 +1120,6 @@ function Page() {
                                    safeLocalStorage.removeItem(`job_start_${jobIdToPoll}`);
                               }
                               loadPreviousJobs();
-                              
-                              // Auto-refresh page after 2 seconds to ensure clean state for next generation
-                              setTimeout(() => {
-                                   console.log("✅ Generation complete - refreshing page for clean state");
-                                   window.location.reload();
-                              }, 2000);
                          } else if (data.status === "failed") {
                               setError(data.error || "Video generation failed");
                               setIsGenerating(false);

@@ -295,7 +295,7 @@ function page() {
                     // Check status for jobs that are still pending/running but might be completed
                     // Only check the first few jobs to avoid too many requests
                     const jobsToCheck = data.jobs
-                         .filter((job: any) => (job.status === "pending" || job.status === "running") && !job.output_url)
+                         .filter((job: any) => (job.status === "pending" || job.status === "running" || job.status === "processing" || (job.status === "completed" && !job.output_url)) && !job.output_url)
                          .slice(0, 3); // Only check up to 3 jobs at a time
                     
                     jobsToCheck.forEach((job: any) => {
@@ -331,7 +331,7 @@ function page() {
                               setOutputUrl(mostRecentJob.output_url);
                               setSelectedJob(mostRecentJob);
                               setJobStatus("completed");
-                         } else if (mostRecentJob.status === "pending" || mostRecentJob.status === "running") {
+                         } else if (mostRecentJob.status === "pending" || mostRecentJob.status === "running" || mostRecentJob.status === "processing" || (mostRecentJob.status === "completed" && !mostRecentJob.output_url)) {
                               // Set job info for pending/running jobs
                               setJobId(mostRecentJob.job_id);
                               setJobStatus(mostRecentJob.status);
@@ -351,7 +351,7 @@ function page() {
                               }
                               
                               // Resume generating state if job is still pending/running
-                              if ((mostRecentJob.status === "pending" || mostRecentJob.status === "running") && !mostRecentJob.output_url) {
+                              if ((mostRecentJob.status === "pending" || mostRecentJob.status === "running" || mostRecentJob.status === "processing" || (mostRecentJob.status === "completed" && !mostRecentJob.output_url)) && !mostRecentJob.output_url) {
                                    if (!isGenerating) {
                                         setIsGenerating(true);
                                    }
@@ -380,7 +380,7 @@ function page() {
                                    }
                               }
                               
-                              if ((currentJob.status === "pending" || currentJob.status === "running") && !currentJob.output_url) {
+                              if ((currentJob.status === "pending" || currentJob.status === "running" || currentJob.status === "processing" || (currentJob.status === "completed" && !currentJob.output_url)) && !currentJob.output_url) {
                                    // Resume generating state and polling only if not already generating
                                    if (!isGenerating) {
                                         setIsGenerating(true);
@@ -794,12 +794,6 @@ function page() {
                          localStorage.removeItem(`job_start_${jobId}`);
                          // Reload previous jobs to include the new one
                          loadPreviousJobs();
-                         
-                         // Auto-refresh page after 2 seconds to ensure clean state for next generation
-                         setTimeout(() => {
-                              console.log("✅ Generation complete - refreshing page for clean state");
-                              window.location.reload();
-                         }, 2000);
                     } else if (data.status === "failed") {
                          setError(data.error || "Job failed");
                          setIsGenerating(false);

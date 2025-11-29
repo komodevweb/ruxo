@@ -723,29 +723,76 @@ async def list_text_to_video_jobs(
         
         logger.debug(f"Found {len(jobs)} jobs for user {current_user.id}")
         
-        # Check status for completed jobs that don't have output_url
+        # Check status for jobs that are still pending/running or completed but missing URL
         wavespeed_service = WaveSpeedService()
         if wavespeed_service.api_key:
             for job in jobs:
-                if (job.status == "completed" or job.status == "running") and not job.output_url:
+                if job.status in ["pending", "running"] or (job.status == "completed" and not job.output_url):
                     wavespeed_task_id = job.settings.get('wavespeed_task_id')
                     if wavespeed_task_id:
                         try:
-                            logger.info(f"Checking status for job {job.id} without output_url (task: {wavespeed_task_id})")
+                            logger.info(f"Checking status for job {job.id} (status: {job.status}, task: {wavespeed_task_id})")
                             wavespeed_result = await wavespeed_service.get_job_result(wavespeed_task_id)
                             task_data = wavespeed_result.get('data', {})
-                            outputs = task_data.get('outputs', [])
                             
-                            if outputs:
-                                if isinstance(outputs, list) and len(outputs) > 0:
-                                    job.output_url = outputs[0]
-                                elif isinstance(outputs, str):
-                                    job.output_url = outputs
+                            # Get new status and outputs
+                            new_status = task_data.get('status', job.status)
+                            outputs = task_data.get('outputs', [])
+                            error_message = task_data.get('error')
+                            
+                            # Map WaveSpeed status to our status
+                            status_map = {
+                                "created": "pending",
+                                "processing": "running",
+                                "completed": "completed",
+                                "failed": "failed"
+                            }
+                            mapped_status = status_map.get(new_status, new_status)
+                            
+                            # Update job if status changed or URL found
+                            should_commit = False
+                            
+                            if mapped_status != job.status:
+                                job.status = mapped_status
+                                should_commit = True
                                 
-                                if job.output_url:
+                            if outputs:
+                                output_url = None
+                                if isinstance(outputs, list) and len(outputs) > 0:
+                                    output_url = outputs[0]
+                                elif isinstance(outputs, str):
+                                    output_url = outputs
+                                
+                                if output_url and output_url != job.output_url:
+                                    job.output_url = output_url
+                                    should_commit = True
+                                    logger.info(f"Retrieved output URL for job {job.id}: {job.output_url}")
+                                    
+                            if error_message and error_message != job.error_message:
+                                job.error_message = error_message
+                                should_commit = True
+                                
+                            if should_commit:
+                                job.updated_at = datetime.utcnow()
+                                session.add(job)
+                                await session.commit()
+                                logger.info(f"Updated job {job.id} status to {mapped_status}")
+                                
+                                # If newly completed, deduct credits if not already done
+                                if mapped_status == "completed" and job.actual_credit_cost == 0:
+                                    actual_cost = job.estimated_credit_cost
+                                    job.actual_credit_cost = actual_cost
+                                    credits_service = CreditsService(session)
+                                    await credits_service.spend_credits(
+                                        user_id=current_user.id,
+                                        amount=actual_cost,
+                                        reason="text_to_video_generation",
+                                        metadata={"job_id": str(job.id), "task_id": wavespeed_task_id}
+                                    )
                                     session.add(job)
                                     await session.commit()
-                                    logger.info(f"Retrieved missing output URL for job {job.id}: {job.output_url}")
+                                    logger.info(f"Deducted {actual_cost} credits for completed job {job.id}")
+                                    
                         except Exception as e:
                             logger.warning(f"Failed to check status for job {job.id}: {e}")
         
@@ -769,8 +816,8 @@ async def list_text_to_video_jobs(
             "total": len(jobs)
         }
         
-        # Cache for 30 seconds (jobs list changes frequently)
-        await set_cached(cache_key_str, response, ttl=30)
+        # Cache for 2 seconds to allow frequent polling but prevent hammering
+        await set_cached(cache_key_str, response, ttl=2)
         
         return response
         
@@ -893,8 +940,8 @@ async def list_all_video_jobs(
             "total": len(jobs_data)
         }
         
-        # Cache for 15 seconds (all-jobs is polled frequently)
-        await set_cached(cache_key_str, response, ttl=15)
+        # Cache for 2 seconds (all-jobs is polled frequently)
+        await set_cached(cache_key_str, response, ttl=2)
         
         return response
         

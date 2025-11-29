@@ -64,7 +64,7 @@ function Timer() {
   if (!mounted) {
     return (
       <div className='bg-blue2 fixed top-0 left-0 w-full z-[1001] flex-wrap text-center py-1.5 md:py-2 flex gap-2 md:gap-[18px] items-center justify-center px-2'>
-        <h6 className='text-[10px] md:text-xs font-medium leading-tight text-black'>Limited Time Offer: 70% Off</h6>
+        <h6 className='text-[10px] md:text-xs font-medium leading-tight text-black'>Free Trial Offer Ends in:</h6>
         <h6 className='text-[10px] md:text-xs font-medium leading-tight text-black'><span className='mr-0.5 md:mr-1 inline-block'>--</span> days</h6>
         <h6 className='text-[10px] md:text-xs font-medium leading-tight text-black'><span className='mr-0.5 md:mr-1 inline-block'>--</span> hours</h6>
         <h6 className='text-[10px] md:text-xs font-medium leading-tight text-black'><span className='mr-0.5 md:mr-1 inline-block'>--</span> minutes</h6>
@@ -75,7 +75,7 @@ function Timer() {
 
   return (
     <div className='bg-blue2 fixed top-0 left-0 w-full z-[1001] flex-wrap text-center py-1.5 md:py-2 flex gap-2 md:gap-[18px] items-center justify-center px-2'>
-      <h6 className='text-[10px] md:text-xs font-medium leading-tight text-black'>Limited Time Offer: 70% Off</h6>
+      <h6 className='text-[10px] md:text-xs font-medium leading-tight text-black'>Free Trial Offer Ends in:</h6>
       <h6 className='text-[10px] md:text-xs font-medium leading-tight text-black'>
         <span className='mr-0.5 md:mr-1 inline-block'>{timeLeft.days}</span> days
       </h6>

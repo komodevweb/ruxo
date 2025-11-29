@@ -739,6 +739,16 @@ async def get_image_generation_jobs(
     session: AsyncSession = Depends(get_session)
 ):
     """Get user's image generation jobs."""
+    from app.utils.cache import get_cached, set_cached, cache_key
+    
+    # Generate cache key
+    cache_key_str = cache_key("cache", "image", "jobs", current_user.id, str(limit))
+    
+    # Try to get from cache
+    cached = await get_cached(cache_key_str)
+    if cached is not None:
+        return cached
+
     try:
         stmt = (
             select(RenderJob)
@@ -758,7 +768,8 @@ async def get_image_generation_jobs(
         wavespeed_service = WaveSpeedService()
         if wavespeed_service.api_key:
             for job in jobs:
-                if (job.status == "completed" or job.status == "running" or job.status == "pending") and not job.output_url:
+                # Check status for jobs that are still pending/running or completed but missing URL
+                if job.status in ["pending", "running"] or (job.status == "completed" and not job.output_url):
                     try:
                         wavespeed_task_id = job.settings.get("wavespeed_task_id") if job.settings else None
                         if wavespeed_task_id:
@@ -786,7 +797,12 @@ async def get_image_generation_jobs(
                                 job.error_message = task_data.get('error', 'Unknown error')
                                 session.add(job)
                                 await session.commit()
-                                await session.refresh(job)  # Refresh to ensure all attributes are loaded
+                                await session.refresh(job)
+                            elif wavespeed_status == "processing" and job.status != "running":
+                                job.status = "running"
+                                session.add(job)
+                                await session.commit()
+                                await session.refresh(job)
                             elif wavespeed_status == "completed" and not job.output_url:
                                 # Retry getting output
                                 retry_count = 0
@@ -806,7 +822,7 @@ async def get_image_generation_jobs(
                                     job.status = "completed"
                                     session.add(job)
                                     await session.commit()
-                                    await session.refresh(job)  # Refresh to ensure all attributes are loaded
+                                    await session.refresh(job)
                     except Exception as e:
                         logger.warning(f"Failed to check status for job {job.id}: {e}")
         
@@ -841,10 +857,15 @@ async def get_image_generation_jobs(
                 "settings": job_settings
             })
         
-        return {
+        response = {
             "jobs": jobs_list,
             "total": len(jobs_list)
         }
+
+        # Cache for 2 seconds to allow frequent polling
+        await set_cached(cache_key_str, response, ttl=2)
+
+        return response
         
     except Exception as e:
         logger.error(f"Error fetching image generation jobs: {e}", exc_info=True)

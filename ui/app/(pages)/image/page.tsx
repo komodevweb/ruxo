@@ -33,6 +33,7 @@ export default function ImagePage() {
      const imageUrlRef = useRef<string | null>(null);
      const imageUploadTimestampRef = useRef<number>(0);
      const imageDropRef = useRef<HTMLLabelElement>(null);
+     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
      const [myCreations, setMyCreations] = useState<any[]>([]);
      const [loadingCreations, setLoadingCreations] = useState(false);
      const [hasLoadedCreationsOnce, setHasLoadedCreationsOnce] = useState(false);
@@ -454,17 +455,17 @@ export default function ImagePage() {
      }, [creditCache, selectedModel?.id, selectedResolution]);
 
      // Load user's creations
-     const loadMyCreations = async () => {
+     const loadMyCreations = async (silent = false) => {
           const token = getToken();
           if (!token || !user) {
                setMyCreations([]);
-               setLoadingCreations(false);
+               if (!silent) setLoadingCreations(false);
                setHasLoadedCreationsOnce(false);
                return;
           }
 
           try {
-               setLoadingCreations(true);
+               if (!silent) setLoadingCreations(true);
                // TODO: Replace with actual image generation jobs endpoint when available
                // Example endpoint: `${process.env.NEXT_PUBLIC_API_V1_URL}/image/jobs`
                const response = await fetch(
@@ -488,17 +489,68 @@ export default function ImagePage() {
                     setHasLoadedCreationsOnce(true);
                } else {
                     console.error("Failed to load creations:", response.statusText);
-                    setMyCreations([]);
+                    if (!silent) setMyCreations([]);
                     setHasLoadedCreationsOnce(true);
                }
           } catch (error) {
                console.error("Error loading creations:", error);
-               setMyCreations([]);
+               if (!silent) setMyCreations([]);
                setHasLoadedCreationsOnce(true);
           } finally {
-               setLoadingCreations(false);
+               if (!silent) setLoadingCreations(false);
           }
      };
+
+     // Cleanup polling on unmount
+     useEffect(() => {
+          return () => {
+               if (pollIntervalRef.current) {
+                    clearInterval(pollIntervalRef.current);
+               }
+          };
+     }, []);
+
+     // Auto-poll for pending jobs
+     useEffect(() => {
+          if (activeTab !== 'creations' || !user) return;
+
+          const hasPendingJobs = myCreations.some((job: any) => 
+               job.status === 'pending' || job.status === 'running' || job.status === 'processing' ||
+               (job.status === 'completed' && !job.output_url)
+          );
+
+          if (hasPendingJobs) {
+               if (!pollIntervalRef.current) {
+                    console.log("🔄 Starting polling for pending image jobs...");
+                    pollIntervalRef.current = setInterval(() => loadMyCreations(true), 3000);
+               }
+          } else {
+               if (pollIntervalRef.current) {
+                    console.log("✅ All image jobs completed, stopping polling.");
+                    clearInterval(pollIntervalRef.current);
+                    pollIntervalRef.current = null;
+               }
+          }
+     }, [myCreations, activeTab, user]);
+
+     // Sync generation state with myCreations
+     useEffect(() => {
+          if (jobId && myCreations.length > 0) {
+               const job = myCreations.find((j: any) => j.job_id === jobId);
+               if (job) {
+                    if (job.output_url) {
+                         setOutputUrl(job.output_url);
+                         setIsGenerating(false);
+                         // Clear jobId so we don't keep checking
+                         setJobId(null);
+                    } else if (job.status === 'failed') {
+                         setError(job.error || "Generation failed");
+                         setIsGenerating(false);
+                         setJobId(null);
+                    }
+               }
+          }
+     }, [myCreations, jobId]);
 
      // Load models on mount
      useEffect(() => {
@@ -972,43 +1024,9 @@ export default function ImagePage() {
                                              
                                              setJobId(data.job_id);
                                              
-                                             // Poll for job status
-                                             const pollJobStatus = async () => {
-                                                  try {
-                                                       const statusResponse = await fetch(
-                                                            `${process.env.NEXT_PUBLIC_API_V1_URL}/image/jobs/${data.job_id}`,
-                                                            {
-                                                                 headers: {
-                                                                      "Authorization": `Bearer ${token}`,
-                                                                 },
-                                                            }
-                                                       );
-                                                       
-                                                       if (statusResponse.ok) {
-                                                            const statusData = await statusResponse.json();
-                                                            if (statusData.output_url) {
-                                                                 setOutputUrl(statusData.output_url);
-                                                                 setIsGenerating(false);
-                                                                 loadMyCreations();
-                                                                 return;
-                                                            }
-                                                            if (statusData.status === "failed") {
-                                                                 setIsGenerating(false);
-                                                                 setError(`Generation failed: ${statusData.error || "Unknown error"}`);
-                                                                 return;
-                                                            }
-                                                       }
-                                                       
-                                                       // Continue polling if not completed
-                                                       setTimeout(pollJobStatus, 3000);
-                                                  } catch (error) {
-                                                       console.error("Error polling job status:", error);
-                                                       setTimeout(pollJobStatus, 3000);
-                                                  }
-                                             };
-                                             
-                                             // Start polling after 3 seconds
-                                             setTimeout(pollJobStatus, 3000);
+                                             // Refresh creations immediately to show the new pending job
+                                             // The global poller will take over from there
+                                             setTimeout(() => loadMyCreations(true), 1000);
                                         } catch (error: any) {
                                              console.error("Error generating image:", error);
                                              setIsGenerating(false);
