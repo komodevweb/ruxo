@@ -522,10 +522,6 @@ function page() {
           const requiredCredits = creditsValue ?? 0; // Fallback for logic
           const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
           
-          if (!hasSubscription) {
-               return { text: "Get More Credits", action: handleUpgrade };
-          }
-          
           if (!hasEnoughCredits) {
                return { text: "Get More Credits", action: () => router.push("/upgrade") };
           }
@@ -624,7 +620,7 @@ function page() {
                     
                     // Check for any pending/running jobs and automatically resume generation state
                     const runningJob = data.jobs.find((job: any) => 
-                         (job.status === "pending" || job.status === "running" || job.status === "processing" || (job.status === "completed" && !job.output_url)) && !job.output_url
+                         (job.status === "pending" || job.status === "running" || job.status === "processing") && !job.output_url
                     );
                     
                     if (runningJob) {
@@ -694,7 +690,7 @@ function page() {
                                    }
                               }
                               
-                              if ((currentJob.status === "pending" || currentJob.status === "running" || currentJob.status === "processing" || (currentJob.status === "completed" && !currentJob.output_url)) && !currentJob.output_url) {
+                              if ((currentJob.status === "pending" || currentJob.status === "running" || currentJob.status === "processing") && !currentJob.output_url) {
                                    // Resume generating state and polling only if not already generating
                                    if (!isGenerating) {
                                         setIsGenerating(true);
@@ -711,14 +707,16 @@ function page() {
                                    setProgress(100);
                                    setIsGenerating(false);
                                    setIsPolling(false);
+                                   isSubmittingRef.current = false; // Reset ref
                                    cleanupPolling();
                                    // Clean up localStorage
                                    safeLocalStorage.removeItem(`job_start_${jobId}`);
                               } else if (currentJob.status === "failed") {
                                    // Job failed
-                                   setError(currentJob.error || "Video generation failed");
+                                   setError(currentJob.error || "Video generation failed. Please try changing your prompt.");
                                    setIsGenerating(false);
                                    setIsPolling(false);
+                                   isSubmittingRef.current = false; // Reset ref
                                    cleanupPolling();
                                    // Clean up localStorage
                                    safeLocalStorage.removeItem(`job_start_${jobId}`);
@@ -963,7 +961,7 @@ function page() {
                               }
                               loadPreviousJobs();
                          } else if (data.status === "failed") {
-                              setError(data.error || "Video generation failed");
+                              setError(data.error || "Video generation failed. Please try changing your prompt.");
                               setIsGenerating(false);
                               setIsPolling(false);
                               isSubmittingRef.current = false;
@@ -1248,7 +1246,8 @@ function page() {
                               {(() => {
                                    const buttonConfig = getButtonConfig();
                                    const isGenerateAction = buttonConfig.action === handleGenerate;
-                                   const isDisabled = isGenerateAction && (!prompt.trim() || isGenerating || audioUploading || isSubmittingRef.current);
+                                   // Only disable if generating/uploading, OR if prompt is empty/invalid when trying to generate
+                                   const isDisabled = isGenerateAction && (isGenerating || audioUploading || isSubmittingRef.current || !prompt.trim());
                                    const isLoading = isGenerating || audioUploading;
                                    
                                    return (

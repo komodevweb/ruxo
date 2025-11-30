@@ -628,7 +628,7 @@ async def get_text_to_video_status(
             # Don't fail - just log and continue. The URL might be available in a future check.
         
         if error_message:
-            render_job.error_message = error_message
+            render_job.error_message = f"{error_message}. Please try changing your prompt."
             logger.error(f"Job {job_id} failed with error: {error_message}")
         
         render_job.updated_at = datetime.utcnow()
@@ -778,9 +778,11 @@ async def list_text_to_video_jobs(
                                     should_commit = True
                                     logger.info(f"Retrieved output URL for job {job.id}: {job.output_url}")
                                     
-                            if error_message and error_message != job.error_message:
-                                job.error_message = error_message
-                                should_commit = True
+                            if error_message:
+                                enhanced_error = f"{error_message}. Please try changing your prompt."
+                                if enhanced_error != job.error_message:
+                                    job.error_message = enhanced_error
+                                    should_commit = True
                                 
                             if should_commit:
                                 job.updated_at = datetime.utcnow()

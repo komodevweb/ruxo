@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/api";
 import { allImages } from "../../lib/gallery-images";
+import UpgradeModal from "@/app/components/UpgradeModal";
 
 export default function ImagePage() {
      const { user, loading: authLoading } = useAuth();
@@ -38,6 +39,7 @@ export default function ImagePage() {
      const [loadingCreations, setLoadingCreations] = useState(false);
      const [hasLoadedCreationsOnce, setHasLoadedCreationsOnce] = useState(false);
      const [selectedImageOverlay, setSelectedImageOverlay] = useState<string | null>(null);
+     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
      // Format resolution for display (e.g., "1024*1024" -> "1K" or "1024×1024")
      const formatResolution = (resolution: string): string => {
@@ -469,9 +471,10 @@ export default function ImagePage() {
                // TODO: Replace with actual image generation jobs endpoint when available
                // Example endpoint: `${process.env.NEXT_PUBLIC_API_V1_URL}/image/jobs`
                const response = await fetch(
-                    `${process.env.NEXT_PUBLIC_API_V1_URL}/image/jobs?limit=50`,
+                    `${process.env.NEXT_PUBLIC_API_V1_URL}/image/jobs?limit=50&t=${Date.now()}`,
                     {
                          method: "GET",
+                         cache: 'no-store',
                          headers: {
                               "Authorization": `Bearer ${token}`,
                               "Content-Type": "application/json",
@@ -501,52 +504,66 @@ export default function ImagePage() {
           }
      };
 
-     // Cleanup polling on unmount
-     useEffect(() => {
-          return () => {
-               if (pollIntervalRef.current) {
-                    clearInterval(pollIntervalRef.current);
-               }
-          };
-     }, []);
-
      // Auto-poll for pending jobs
      useEffect(() => {
-          if (activeTab !== 'creations' || !user) return;
-
+          // Determine if we should be polling
+          // 1. If we are actively generating a specific job (regardless of tab)
+          // 2. If we are on the 'creations' tab and there are pending jobs
+          
           const hasPendingJobs = myCreations.some((job: any) => 
-               job.status === 'pending' || job.status === 'running' || job.status === 'processing' ||
-               (job.status === 'completed' && !job.output_url)
+               job.status === 'pending' || job.status === 'running' || job.status === 'processing'
           );
+          
+          const shouldPoll = (user && isGenerating && jobId) || (user && activeTab === 'creations' && hasPendingJobs);
 
-          if (hasPendingJobs) {
+          if (shouldPoll) {
                if (!pollIntervalRef.current) {
                     console.log("🔄 Starting polling for pending image jobs...");
                     pollIntervalRef.current = setInterval(() => loadMyCreations(true), 3000);
                }
           } else {
                if (pollIntervalRef.current) {
-                    console.log("✅ All image jobs completed, stopping polling.");
+                    console.log("✅ Polling stopped (no pending jobs or not needed).");
                     clearInterval(pollIntervalRef.current);
                     pollIntervalRef.current = null;
                }
           }
-     }, [myCreations, activeTab, user]);
+
+          // Cleanup function to clear interval when component unmounts or dependencies change
+          // We only clear if we're NOT supposed to poll anymore, or if we're unmounting
+          // This prevents restarting the interval on every render/update if we still want to poll
+          return () => {
+               // We don't automatically clear here to persist the interval across renders
+               // The logic above handles clearing if shouldPoll becomes false
+          };
+     }, [myCreations, activeTab, user, isGenerating, jobId]);
+
+     // Cleanup on unmount (separate effect to be safe)
+     useEffect(() => {
+          return () => {
+               if (pollIntervalRef.current) {
+                    clearInterval(pollIntervalRef.current);
+                    pollIntervalRef.current = null;
+               }
+          };
+     }, []);
 
      // Sync generation state with myCreations
      useEffect(() => {
           if (jobId && myCreations.length > 0) {
                const job = myCreations.find((j: any) => j.job_id === jobId);
                if (job) {
-                    if (job.output_url) {
-                         setOutputUrl(job.output_url);
+                    if (job.status === 'completed') {
+                         if (job.output_url) {
+                              setOutputUrl(job.output_url);
+                         }
                          setIsGenerating(false);
-                         // Clear jobId so we don't keep checking
                          setJobId(null);
                     } else if (job.status === 'failed') {
-                         setError(job.error || "Generation failed");
+                         setError(job.error || "Generation failed. Please try changing your prompt.");
                          setIsGenerating(false);
                          setJobId(null);
+                         loadMyCreations(true);
                     }
                }
           }
@@ -896,7 +913,7 @@ export default function ImagePage() {
                                              : (modelId ? getRequiredCreditsSync(modelId, selectedResolution) : 0);
                                         const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
                                         
-                                        if (!hasSubscription || !hasEnoughCredits) {
+                                        if (!hasEnoughCredits) {
                                              router.push("/upgrade");
                                              return;
                                         }
@@ -1045,7 +1062,7 @@ export default function ImagePage() {
                                              const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
                                              
                                              // If no subscription or not enough credits, button should be clickable to go to upgrade
-                                             if (!hasSubscription || !hasEnoughCredits) {
+                                             if (!hasEnoughCredits) {
                                                   return false;
                                              }
                                         }
@@ -1066,9 +1083,9 @@ export default function ImagePage() {
                                                        : (modelId ? getRequiredCreditsSync(modelId, selectedResolution) : 0);
                                                   const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
                                                   
-                                                  if (!hasSubscription || !hasEnoughCredits) {
-                                                       return false; // Not disabled, should be clickable
-                                                  }
+                                             if (!hasEnoughCredits) {
+                                                  return false; // Not disabled, should be clickable
+                                             }
                                              }
                                              return !!user && (isGenerating || imageUploading || !prompt.trim() || !selectedModel || (mode === "image-to-image" && !imageFile && !imageUrl));
                                         })() 
@@ -1087,10 +1104,6 @@ export default function ImagePage() {
                                         // Use displayCredits state to prevent blinking (updated when cache changes)
                                         const requiredCredits = displayCredits > 0 ? displayCredits : getRequiredCreditsSync(modelId, selectedResolution);
                                         const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
-                                        
-                                        if (!hasSubscription) {
-                                             return "Get More Credits";
-                                        }
                                         
                                         if (!hasEnoughCredits) {
                                              return "Get More Credits";
@@ -1291,6 +1304,15 @@ export default function ImagePage() {
                                                                  <button
                                                                       onClick={(e) => {
                                                                            e.stopPropagation();
+                                                                           
+                                                                           // Check for premium subscription
+                                                                           // Premium users have a plan AND are not in trial mode
+                                                                           const isPremium = !!user?.plan_name && user?.subscription_status !== 'trialing';
+                                                                           if (!isPremium) {
+                                                                                setShowUpgradeModal(true);
+                                                                                return;
+                                                                           }
+
                                                                            // Get output format from job settings, fallback to 'jpg'
                                                                            const outputFormat = job.settings?.output_format || job.output_format || 'jpg';
                                                                            forceDownload(job.output_url, `image-${job.job_id?.slice(0, 8) || idx}`, outputFormat);
@@ -1372,6 +1394,12 @@ export default function ImagePage() {
                          </div>
                     </div>
                )}
+
+               <UpgradeModal 
+                    isOpen={showUpgradeModal} 
+                    onClose={() => setShowUpgradeModal(false)} 
+                    message="You need a full subscription to download images."
+               />
           </div>
      );
 }

@@ -145,10 +145,9 @@ function page() {
      // Check if user can generate (has subscription and enough credits)
      const canGenerate = () => {
           if (!user) return false;
-          const hasSubscription = !!user.plan_name;
           const requiredCredits = getRequiredCreditsSync(active);
           const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
-          return hasSubscription && hasEnoughCredits;
+          return hasEnoughCredits;
      };
 
      // Get button text and action
@@ -161,10 +160,6 @@ function page() {
           const hasSubscription = !!user.plan_name;
           const requiredCredits = getRequiredCreditsSync(active);
           const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
-          
-          if (!hasSubscription) {
-               return { text: "Get More Credits", action: () => router.push("/upgrade") };
-          }
           
           if (!hasEnoughCredits) {
                return { text: "Get More Credits", action: () => router.push("/upgrade") };
@@ -331,7 +326,7 @@ function page() {
                               setOutputUrl(mostRecentJob.output_url);
                               setSelectedJob(mostRecentJob);
                               setJobStatus("completed");
-                         } else if (mostRecentJob.status === "pending" || mostRecentJob.status === "running" || mostRecentJob.status === "processing" || (mostRecentJob.status === "completed" && !mostRecentJob.output_url)) {
+                         } else if (mostRecentJob.status === "pending" || mostRecentJob.status === "running" || mostRecentJob.status === "processing") {
                               // Set job info for pending/running jobs
                               setJobId(mostRecentJob.job_id);
                               setJobStatus(mostRecentJob.status);
@@ -351,7 +346,7 @@ function page() {
                               }
                               
                               // Resume generating state if job is still pending/running
-                              if ((mostRecentJob.status === "pending" || mostRecentJob.status === "running" || mostRecentJob.status === "processing" || (mostRecentJob.status === "completed" && !mostRecentJob.output_url)) && !mostRecentJob.output_url) {
+                              if ((mostRecentJob.status === "pending" || mostRecentJob.status === "running" || mostRecentJob.status === "processing") && !mostRecentJob.output_url) {
                                    if (!isGenerating) {
                                         setIsGenerating(true);
                                    }
@@ -380,7 +375,7 @@ function page() {
                                    }
                               }
                               
-                              if ((currentJob.status === "pending" || currentJob.status === "running" || currentJob.status === "processing" || (currentJob.status === "completed" && !currentJob.output_url)) && !currentJob.output_url) {
+                              if ((currentJob.status === "pending" || currentJob.status === "running" || currentJob.status === "processing") && !currentJob.output_url) {
                                    // Resume generating state and polling only if not already generating
                                    if (!isGenerating) {
                                         setIsGenerating(true);
@@ -396,13 +391,15 @@ function page() {
                                    setProgress(100);
                                    setIsGenerating(false);
                                    setIsPolling(false);
+                                   isSubmittingRef.current = false; // Reset ref
                                    // Clean up localStorage
                                    localStorage.removeItem(`job_start_${jobId}`);
                               } else if (currentJob.status === "failed") {
                                    // Job failed
-                                   setError(currentJob.error || "Video generation failed");
+                                   setError(currentJob.error || "Video generation failed. Please try changing your prompt or using a different photo.");
                                    setIsGenerating(false);
                                    setIsPolling(false);
+                                   isSubmittingRef.current = false; // Reset ref
                                    // Clean up localStorage
                                    localStorage.removeItem(`job_start_${jobId}`);
                               }
@@ -1144,7 +1141,7 @@ function page() {
                                                        }}
                                                   />
                                              </div>
-                                        ) : previousJobs.length > 0 || outputUrl || (isGenerating && imagePreview) ? (
+                                        ) : previousJobs.length > 0 || outputUrl || (isGenerating && imagePreview) || jobId ? (
                                              // Show video gallery
                                              <div className="w-full max-w-[1320px] mx-auto">
                                                   {/* Mobile-only Generate button */}

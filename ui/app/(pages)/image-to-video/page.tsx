@@ -445,11 +445,6 @@ function Page() {
           const requiredCredits = getRequiredCreditsSync(size, duration);
           const hasEnoughCredits = (user.credit_balance || 0) >= requiredCredits;
           
-          if (!hasSubscription) {
-               // Redirect to /upgrade page where user can see all available plans
-               return { text: "Get More Credits", action: () => router.push("/upgrade") };
-          }
-          
           if (!hasEnoughCredits) {
                return { text: "Get More Credits", action: () => router.push("/upgrade") };
           }
@@ -571,7 +566,7 @@ function Page() {
                     
                     // Check for any pending/running jobs and automatically show overlay
                     const runningJob = data.jobs.find((job: any) => 
-                         (job.status === "pending" || job.status === "running" || job.status === "processing" || (job.status === "completed" && !job.output_url)) && !job.output_url
+                         (job.status === "pending" || job.status === "running" || job.status === "processing") && !job.output_url
                     );
                     
                     if (runningJob) {
@@ -646,7 +641,7 @@ function Page() {
                                    }
                               }
                               
-                              if ((currentJob.status === "pending" || currentJob.status === "running" || currentJob.status === "processing" || (currentJob.status === "completed" && !currentJob.output_url)) && !currentJob.output_url) {
+                              if ((currentJob.status === "pending" || currentJob.status === "running" || currentJob.status === "processing") && !currentJob.output_url) {
                                    // Resume generating state and polling only if not already generating
                                    if (!isGenerating) {
                                         setIsGenerating(true);
@@ -663,14 +658,16 @@ function Page() {
                                    setProgress(100);
                                    setIsGenerating(false);
                                    setIsPolling(false);
+                                   isSubmittingRef.current = false; // Reset ref
                                    cleanupPolling(); // Clean up any existing intervals
                                    // Clean up localStorage
                                    safeLocalStorage.removeItem(`job_start_${jobId}`);
                               } else if (currentJob.status === "failed") {
                                    // Job failed
-                                   setError(currentJob.error || "Video generation failed");
+                                   setError(currentJob.error || "Video generation failed. Please try changing your prompt or using a different photo.");
                                    setIsGenerating(false);
                                    setIsPolling(false);
+                                   isSubmittingRef.current = false; // Reset ref
                                    cleanupPolling(); // Clean up any existing intervals
                                    // Clean up localStorage
                                    safeLocalStorage.removeItem(`job_start_${jobId}`);
@@ -1121,7 +1118,7 @@ function Page() {
                               }
                               loadPreviousJobs();
                          } else if (data.status === "failed") {
-                              setError(data.error || "Video generation failed");
+                              setError(data.error || "Video generation failed. Please try changing your prompt or using a different photo.");
                               setIsGenerating(false);
                               setIsPolling(false);
                               isSubmittingRef.current = false; // Reset ref on failure
@@ -1643,7 +1640,7 @@ function Page() {
                                         }}
                                    />
                               </div>
-                         ) : previousJobs.length > 0 || outputUrl || (isGenerating && imagePreview) ? (
+                         ) : previousJobs.length > 0 || outputUrl || (isGenerating && imagePreview) || jobId ? (
                               <div className="w-full max-w-[1320px] mx-auto">
                                    <div className="md:hidden block mb-6 px-5" style={{ paddingBottom: 'max(1.5rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))' }}>
                          <div className="text-center mb-6">

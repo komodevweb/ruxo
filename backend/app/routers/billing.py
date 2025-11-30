@@ -758,37 +758,69 @@ async def skip_trial_and_subscribe(
         logger.info(f"Using subscription ID: {trial_subscription.stripe_subscription_id}")
         
         # Get the subscription from Stripe to find the actual plan
-        try:
-            stripe_sub = stripe.Subscription.retrieve(trial_subscription.stripe_subscription_id)
-        except stripe.error.StripeError as e:
-            logger.error(f"Failed to retrieve Stripe subscription: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to retrieve subscription from Stripe. Please try again."
-            )
+        actual_plan_name = None
         
-        # Get the actual plan name from subscription metadata
-        actual_plan_name = stripe_sub.metadata.get("plan_name")
+        # Check for manual/admin subscriptions first
+        if trial_subscription.stripe_subscription_id.startswith(("sub_manual_", "admin_")):
+            logger.info(f"Detected manual/admin subscription: {trial_subscription.stripe_subscription_id}")
+            # Use plan_name from DB
+            if hasattr(trial_subscription, 'plan_name') and trial_subscription.plan_name:
+                actual_plan_name = trial_subscription.plan_name
+                logger.info(f"Using plan_name from DB: {actual_plan_name}")
+            else:
+                # If plan_name is missing or generic "trial", try to fallback to "starter_yearly" as safe default
+                # or check if we can derive it from plan_id
+                if trial_subscription.plan_id:
+                    plan_result = await session.execute(
+                        select(Plan).where(Plan.id == trial_subscription.plan_id)
+                    )
+                    db_plan = plan_result.scalar_one_or_none()
+                    if db_plan:
+                        actual_plan_name = db_plan.name
+                        logger.info(f"Derived plan_name from plan_id: {actual_plan_name}")
         
+        # If not manual, or if we couldn't find plan name, try Stripe
         if not actual_plan_name:
-            # Fallback: Get from price ID
-            if not stripe_sub.items.data:
+            try:
+                stripe_sub = stripe.Subscription.retrieve(trial_subscription.stripe_subscription_id)
+                
+                # Get the actual plan name from subscription metadata
+                actual_plan_name = stripe_sub.metadata.get("plan_name")
+                
+                if not actual_plan_name:
+                    # Fallback: Get from price ID
+                    if not stripe_sub.items.data:
+                        raise HTTPException(
+                            status_code=500,
+                            detail="Subscription has no items. Please contact support."
+                        )
+                    
+                    price_id = stripe_sub.items.data[0].price.id
+                    
+                    plan_result = await session.execute(
+                        select(Plan).where(
+                            Plan.stripe_price_id == price_id,
+                            Plan.name != "free_trial"
+                        )
+                    )
+                    plan = plan_result.scalar_one_or_none()
+                    if plan:
+                        actual_plan_name = plan.name
+            except stripe.error.InvalidRequestError as e:
+                if "No such subscription" in str(e):
+                    # Subscription might have been deleted in Stripe but still exists in DB
+                    # Try to use plan_name from DB if available
+                    logger.warning(f"Subscription not found in Stripe: {e}")
+                    if hasattr(trial_subscription, 'plan_name') and trial_subscription.plan_name:
+                        actual_plan_name = trial_subscription.plan_name
+                else:
+                    raise
+            except stripe.error.StripeError as e:
+                logger.error(f"Failed to retrieve Stripe subscription: {e}")
                 raise HTTPException(
                     status_code=500,
-                    detail="Subscription has no items. Please contact support."
+                    detail="Failed to retrieve subscription from Stripe. Please try again."
                 )
-            
-            price_id = stripe_sub.items.data[0].price.id
-            
-            plan_result = await session.execute(
-                select(Plan).where(
-                    Plan.stripe_price_id == price_id,
-                    Plan.name != "free_trial"
-                )
-            )
-            plan = plan_result.scalar_one_or_none()
-            if plan:
-                actual_plan_name = plan.name
         
         if not actual_plan_name:
             raise HTTPException(

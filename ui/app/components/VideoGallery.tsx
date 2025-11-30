@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, memo } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import UpgradeModal from "./UpgradeModal";
 
 interface VideoGalleryProps {
   jobs: any[];
@@ -14,12 +16,16 @@ const VideoCard = memo(({
   job, 
   loadingPercentage, 
   onSelectJob, 
-  playPromise 
+  playPromise,
+  isPremium,
+  onUpgradeRequired
 }: { 
   job: any; 
   loadingPercentage?: number; 
   onSelectJob: (job: any) => void;
   playPromise: { current: Promise<void> | undefined };
+  isPremium: boolean;
+  onUpgradeRequired: () => void;
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [aspectRatioStyle, setAspectRatioStyle] = useState<any>(undefined);
@@ -78,6 +84,11 @@ const VideoCard = memo(({
   }, [job]);
 
   const forceDownload = async (url: string, filename: string) => {
+    if (!isPremium) {
+      onUpgradeRequired();
+      return;
+    }
+
     if (isDownloading) return;
     setIsDownloading(true);
 
@@ -259,6 +270,11 @@ const VideoCard = memo(({
 VideoCard.displayName = "VideoCard";
 
 function VideoGalleryInner({ jobs, selectedJobId, loading = false, onSelectJob }: VideoGalleryProps) {
+  const { user } = useAuth();
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  // Premium users have a plan AND are not in trial mode (trial users can generate but not download)
+  const isPremium = !!user?.plan_name && user?.subscription_status !== 'trialing';
+
   if (loading) {
     return (
       <section className="py-12 relative">
@@ -449,9 +465,17 @@ function VideoGalleryInner({ jobs, selectedJobId, loading = false, onSelectJob }
               loadingPercentage={loadingPercentages[job.job_id]}
               onSelectJob={onSelectJob}
               playPromise={{ current: undefined }} // Pass a fresh ref-like object for local tracking
+              isPremium={isPremium}
+              onUpgradeRequired={() => setShowUpgradeModal(true)}
             />
           ))}
         </div>
+
+        <UpgradeModal 
+          isOpen={showUpgradeModal} 
+          onClose={() => setShowUpgradeModal(false)} 
+          message="You need a full subscription to download videos."
+        />
 
         {/* Modern Pagination */}
         {totalPages > 1 && (
@@ -510,6 +534,15 @@ const VideoGallery = memo(VideoGalleryInner, (prevProps, nextProps) => {
   const prevKey = prevProps.jobs.map(j => `${j.job_id}:${j.status}:${j.output_url || ''}`).join('|');
   const nextKey = nextProps.jobs.map(j => `${j.job_id}:${j.status}:${j.output_url || ''}`).join('|');
   
+  // We don't strictly check user/isPremium here because useAuth is internal to VideoGalleryInner
+  // but since VideoCard is memoized, we rely on VideoCard's props updating if we were passing it down.
+  // However, VideoGalleryInner itself re-renders when useAuth changes (context update), 
+  // so it will re-render VideoCards with new isPremium prop.
+  // The memo check here is for the wrapper. Since VideoGalleryInner uses a hook, 
+  // the wrapper memoization might block context updates if props didn't change?
+  // Actually, memo only compares props. If context changes inside, component re-renders.
+  // So this is fine.
+
   return prevKey === nextKey;
 });
 

@@ -705,9 +705,11 @@ async def get_image_to_video_jobs(
                                     should_commit = True
                                     logger.info(f"Retrieved output URL for job {job.id}: {job.output_url}")
                                     
-                            if error_message and error_message != job.error_message:
-                                job.error_message = error_message
-                                should_commit = True
+                            if error_message:
+                                enhanced_error = f"{error_message}. Please try changing your prompt or using a different photo."
+                                if enhanced_error != job.error_message:
+                                    job.error_message = enhanced_error
+                                    should_commit = True
                                 
                             if should_commit:
                                 job.updated_at = datetime.utcnow()
@@ -839,7 +841,7 @@ async def get_image_to_video_job(
                         logger.warning(f"Job {job_id} marked as completed but no outputs found. Status: {new_status}, checking again...")
                     
                     if error_message:
-                        job.error_message = error_message
+                        job.error_message = f"{error_message}. Please try changing your prompt or using a different photo."
                         logger.error(f"Job {job_id} failed with error: {error_message}")
                     
                     job.updated_at = datetime.utcnow()
