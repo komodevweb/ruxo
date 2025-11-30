@@ -132,6 +132,23 @@ async def signup(
             gbraid = signup_request.gbraid
             wbraid = signup_request.wbraid
             
+            # Fallback to cookies if not in body
+            if http_request:
+                if not fbp:
+                    fbp = http_request.cookies.get("_fbp")
+                if not fbc:
+                    fbc = http_request.cookies.get("_fbc")
+                if not ttp:
+                    ttp = http_request.cookies.get("_ttp")
+                if not ttclid:
+                    ttclid = http_request.cookies.get("_ttclid") or http_request.cookies.get("ttclid")
+                if not gclid:
+                    gclid = http_request.cookies.get("gclid") or http_request.cookies.get("_gcl_aw") or http_request.query_params.get("gclid")
+                if not gbraid:
+                    gbraid = http_request.cookies.get("gbraid") or http_request.query_params.get("gbraid")
+                if not wbraid:
+                    wbraid = http_request.cookies.get("wbraid") or http_request.query_params.get("wbraid")
+            
             # GA4
             ga_client_id = signup_request.ga_client_id
             ga_session_id = signup_request.ga_session_id
@@ -1206,7 +1223,12 @@ class CompleteRegistrationRequest(BaseModel):
     # TikTok cookies
     ttp: Optional[str] = None
     ttclid: Optional[str] = None
- 
+    
+    # Google Ads
+    gclid: Optional[str] = None
+    gbraid: Optional[str] = None
+    wbraid: Optional[str] = None
+
     # GA4
     ga_client_id: Optional[str] = None
     ga_session_id: Optional[str] = None
@@ -1325,8 +1347,43 @@ async def oauth_complete_registration(
             if tracking_data.fbc:
                 fbc = tracking_data.fbc
         
+        # Fallback for GA4 cookies if not provided in tracking_data
+        ga_client_id = None
+        ga_session_id = None
+        
+        if tracking_data and tracking_data.ga_client_id:
+            ga_client_id = tracking_data.ga_client_id
+        
+        if tracking_data and tracking_data.ga_session_id:
+            ga_session_id = tracking_data.ga_session_id
+            
+        # Try extracting from cookies if missing
+        if not ga_client_id and http_request:
+            ga_cookie = http_request.cookies.get("_ga")
+            if ga_cookie:
+                parts = ga_cookie.split('.')
+                if len(parts) >= 2:
+                    ga_client_id = '.'.join(parts[-2:])
+                else:
+                    ga_client_id = ga_cookie
+        
+        if not ga_session_id and http_request:
+            for cookie_name, cookie_value in http_request.cookies.items():
+                if cookie_name.startswith("_ga_"):
+                    parts = cookie_value.split(".")
+                    if len(parts) > 2:
+                        ga_session_id = parts[2]
+                        break
+                        
+        # If still missing, try to fallback to what we saved in user profile
+        if not ga_client_id and hasattr(current_user, 'signup_ga_client_id') and current_user.signup_ga_client_id:
+            ga_client_id = current_user.signup_ga_client_id
+            
+        if not ga_session_id and hasattr(current_user, 'signup_ga_session_id') and current_user.signup_ga_session_id:
+            ga_session_id = current_user.signup_ga_session_id
+        
         logger.info(f"🎯 [OAUTH COMPLETE-REGISTRATION] Firing CompleteRegistration for NEW OAuth user: {current_user.email}")
-        logger.info(f"📊 [OAUTH COMPLETE-REGISTRATION] Real browser data: IP={client_ip}, UA={bool(client_user_agent)}, fbp={bool(fbp)}, fbc={bool(fbc)}")
+        logger.info(f"📊 [OAUTH COMPLETE-REGISTRATION] Real browser data: IP={client_ip}, UA={bool(client_user_agent)}, fbp={bool(fbp)}, fbc={bool(fbc)}, ga_client_id={bool(ga_client_id)}")
         if fbp:
             logger.info(f"📊 [OAUTH COMPLETE-REGISTRATION] fbp value: {fbp[:30]}..." if len(fbp) > 30 else f"📊 [OAUTH COMPLETE-REGISTRATION] fbp value: {fbp}")
         if fbc:
@@ -1412,11 +1469,11 @@ async def oauth_complete_registration(
         ))
         
         # GA4 tracking
-        if tracking_data and tracking_data.ga_client_id:
+        if ga_client_id:
             asyncio.create_task(ga4_service.track_sign_up(
-                client_id=tracking_data.ga_client_id,
+                client_id=ga_client_id,
                 user_id=str(current_user.id),
-                session_id=tracking_data.ga_session_id,
+                session_id=ga_session_id,
                 client_ip=client_ip,
                 user_agent=client_user_agent,
                 page_location=f"{settings.FRONTEND_URL}/dashboard",
