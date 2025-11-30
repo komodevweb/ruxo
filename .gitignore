@@ -9,4 +9,7 @@ ui/.env
 logs/
 *.log
 
-lo
+logs/facebook_conversions_api.log
+logs/ga4_tracking.log 
+logs/ga4_tracking.log 
+
