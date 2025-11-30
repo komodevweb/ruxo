@@ -1468,7 +1468,7 @@ async def oauth_complete_registration(
             ttclid=ttclid,
         ))
         
-        # GA4 tracking
+                # GA4 tracking
         if ga_client_id:
             asyncio.create_task(ga4_service.track_sign_up(
                 client_id=ga_client_id,
@@ -1476,7 +1476,7 @@ async def oauth_complete_registration(
                 session_id=ga_session_id,
                 client_ip=client_ip,
                 user_agent=client_user_agent,
-                page_location=f"{settings.FRONTEND_URL}/dashboard",
+                page_location=f"{settings.FRONTEND_URL}/",
                 method="google"  # Since this is OAuth callback
             ))
         
