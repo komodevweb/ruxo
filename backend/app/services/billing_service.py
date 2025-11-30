@@ -30,6 +30,9 @@ class BillingService:
         fbc: Optional[str] = None,
         ttp: Optional[str] = None,
         ttclid: Optional[str] = None,
+        gclid: Optional[str] = None,
+        gbraid: Optional[str] = None,
+        wbraid: Optional[str] = None,
         **extra_metadata
     ) -> dict:
         """Build checkout session metadata with tracking context for Purchase events."""
@@ -56,6 +59,13 @@ class BillingService:
             metadata["ttclid"] = ttclid
             # Also add click_id alias
             metadata["click_id"] = ttclid
+        # Google Ads parameters
+        if gclid:
+            metadata["gclid"] = gclid
+        if gbraid:
+            metadata["gbraid"] = gbraid
+        if wbraid:
+            metadata["wbraid"] = wbraid
         
         # Add any extra metadata (e.g., is_upgrade, existing_subscription_id)
         metadata.update(extra_metadata)
@@ -72,7 +82,10 @@ class BillingService:
         fbp: Optional[str] = None,
         fbc: Optional[str] = None,
         ttp: Optional[str] = None,
-        ttclid: Optional[str] = None
+        ttclid: Optional[str] = None,
+        gclid: Optional[str] = None,
+        gbraid: Optional[str] = None,
+        wbraid: Optional[str] = None
     ) -> str:
         """Create Stripe checkout session for a subscription plan or upgrade existing subscription."""
         import logging
@@ -298,7 +311,10 @@ class BillingService:
                 "fbp": fbp or "",
                 "fbc": fbc or "",
                 "ttp": ttp or "",
-                "ttclid": ttclid or ""
+                "ttclid": ttclid or "",
+                "gclid": gclid or "",
+                "gbraid": gbraid or "",
+                "wbraid": wbraid or ""
             }
         }
         
@@ -325,6 +341,9 @@ class BillingService:
                 fbc=fbc,
                 ttp=ttp,
                 ttclid=ttclid,
+                gclid=gclid,
+                gbraid=gbraid,
+                wbraid=wbraid,
             ),
             "subscription_data": subscription_data,
         }
@@ -533,11 +552,12 @@ class BillingService:
                 try:
                     from app.services.facebook_conversions import FacebookConversionsService
                     from app.services.tiktok_conversions import TikTokConversionsService
+                    from app.services.google_conversions import GoogleAdsConversionsService
                     from app.models.user import UserProfile
                     from sqlalchemy.future import select
                     
                     logger.info("=" * 80)
-                    logger.info("💰 [PURCHASE TRACKING] Starting Facebook Purchase event tracking")
+                    logger.info("💰 [PURCHASE TRACKING] Starting Purchase event tracking")
                     
                     # Get user profile for email
                     result = await self.session.execute(
@@ -576,6 +596,10 @@ class BillingService:
                         # TikTok cookies
                         ttp = metadata.get("ttp")
                         ttclid = metadata.get("ttclid")
+                        # Google Ads parameters
+                        gclid = metadata.get("gclid")
+                        gbraid = metadata.get("gbraid")
+                        wbraid = metadata.get("wbraid")
                         
                         # FALLBACK 1: Check subscription metadata if session metadata is missing
                         if not client_ip and stripe_subscription:
@@ -588,6 +612,9 @@ class BillingService:
                                 fbc = sub_metadata.get("fbc")
                                 ttp = sub_metadata.get("ttp")
                                 ttclid = sub_metadata.get("ttclid")
+                                gclid = sub_metadata.get("gclid")
+                                gbraid = sub_metadata.get("gbraid")
+                                wbraid = sub_metadata.get("wbraid")
                         
                         # FALLBACK 2: If still missing, use last_checkout_* from user profile
                         # This handles cases where subscription was modified directly via Stripe API without checkout
@@ -597,6 +624,7 @@ class BillingService:
                             client_user_agent = user.last_checkout_user_agent
                             fbp = user.last_checkout_fbp
                             fbc = user.last_checkout_fbc
+                            # Note: we don't currently store last_checkout_gclid on user model, but we could
                             logger.info(f"💰 [PURCHASE TRACKING] Fallback context age: {datetime.utcnow() - user.last_checkout_timestamp if user.last_checkout_timestamp else 'unknown'}")
                         
                         # Extract first and last name from display_name for better event matching
@@ -616,9 +644,11 @@ class BillingService:
                         logger.info(f"💰 [PURCHASE TRACKING] Tracking Context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}...")
                         logger.info(f"💰 [PURCHASE TRACKING] Facebook Cookies: fbp={fbp}, fbc={fbc}")
                         logger.info(f"💰 [PURCHASE TRACKING] TikTok Cookies: ttp={ttp}, ttclid={ttclid}")
+                        logger.info(f"💰 [PURCHASE TRACKING] Google Ads: gclid={gclid}, gbraid={gbraid}, wbraid={wbraid}")
                         
                         conversions_service = FacebookConversionsService()
                         tiktok_service = TikTokConversionsService()
+                        google_service = GoogleAdsConversionsService()
                         
                         # Track purchase (fire and forget - don't block response)
                         import asyncio
@@ -651,6 +681,16 @@ class BillingService:
                             event_id=event_id,
                             ttp=ttp,
                             ttclid=ttclid,
+                        ))
+                        # Google Ads tracking
+                        asyncio.create_task(google_service.track_purchase(
+                            value=value,
+                            currency=currency,
+                            email=user.email,
+                            gclid=gclid,
+                            gbraid=gbraid,
+                            wbraid=wbraid,
+                            order_id=event_id
                         ))
                         logger.info(f"✅ [PURCHASE TRACKING] Purchase event triggered successfully")
                         logger.info("=" * 80)
@@ -837,6 +877,7 @@ class BillingService:
                     try:
                         from app.services.facebook_conversions import FacebookConversionsService
                         from app.services.tiktok_conversions import TikTokConversionsService
+                        from app.services.google_conversions import GoogleAdsConversionsService
                         from app.models.user import UserProfile
                         
                         # Get user profile for email/tracking data
@@ -866,6 +907,9 @@ class BillingService:
                             metadata = subscription_data.get("metadata", {})
                             ttp = metadata.get("ttp")
                             ttclid = metadata.get("ttclid")
+                            gclid = metadata.get("gclid")
+                            gbraid = metadata.get("gbraid")
+                            wbraid = metadata.get("wbraid")
 
                             # Extract names
                             first_name = None
@@ -880,6 +924,7 @@ class BillingService:
 
                             fb_service = FacebookConversionsService()
                             tiktok_service = TikTokConversionsService()
+                            google_service = GoogleAdsConversionsService()
                             
                             import asyncio
                             # Facebook Purchase
@@ -912,6 +957,17 @@ class BillingService:
                                 event_id=event_id,
                                 ttp=ttp,
                                 ttclid=ttclid,
+                            ))
+
+                            # Google Ads Purchase
+                            asyncio.create_task(google_service.track_purchase(
+                                value=value,
+                                currency=currency,
+                                email=user.email,
+                                gclid=gclid,
+                                gbraid=gbraid,
+                                wbraid=wbraid,
+                                order_id=event_id
                             ))
                     except Exception as e:
                         logger.error(f"❌ [TRIAL CONVERSION] Failed to track Purchase event: {e}", exc_info=True)
@@ -1086,6 +1142,7 @@ class BillingService:
                     if amount_paid > 0:
                         from app.services.facebook_conversions import FacebookConversionsService
                         from app.services.tiktok_conversions import TikTokConversionsService
+                        from app.services.google_conversions import GoogleAdsConversionsService
                         from app.models.user import UserProfile
                         
                         # Get user
@@ -1116,11 +1173,17 @@ class BillingService:
                             # We need to fetch the subscription from Stripe to get metadata
                             ttp = None
                             ttclid = None
+                            gclid = None
+                            gbraid = None
+                            wbraid = None
                             try:
                                 stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
                                 metadata = stripe_sub.metadata
                                 ttp = metadata.get("ttp")
                                 ttclid = metadata.get("ttclid")
+                                gclid = metadata.get("gclid")
+                                gbraid = metadata.get("gbraid")
+                                wbraid = metadata.get("wbraid")
                                 # Also refresh FBP/FBC if available in metadata (might be newer than user profile)
                                 if metadata.get("fbp"): fbp = metadata.get("fbp")
                                 if metadata.get("fbc"): fbc = metadata.get("fbc")
@@ -1144,6 +1207,7 @@ class BillingService:
                             
                             fb_service = FacebookConversionsService()
                             tiktok_service = TikTokConversionsService()
+                            google_service = GoogleAdsConversionsService()
                             
                             import asyncio
                             # Facebook Purchase
@@ -1176,6 +1240,17 @@ class BillingService:
                                 event_id=event_id,
                                 ttp=ttp,
                                 ttclid=ttclid,
+                            ))
+
+                            # Google Ads Purchase
+                            asyncio.create_task(google_service.track_purchase(
+                                value=value,
+                                currency=currency,
+                                email=user.email,
+                                gclid=gclid,
+                                gbraid=gbraid,
+                                wbraid=wbraid,
+                                order_id=event_id
                             ))
                         else:
                             logger.warning(f"⚠️  [INVOICE PAYMENT] Missing user or plan for tracking (user found: {bool(user)}, plan found: {bool(plan)})")

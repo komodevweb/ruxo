@@ -437,13 +437,15 @@ class FacebookConversionsService:
         fbc: Optional[str] = None,
         event_source_url: Optional[str] = None,
         event_id: Optional[str] = None,
+        content_name: Optional[str] = None,
+        content_ids: Optional[List[str]] = None,
     ) -> bool:
         """
         Track Purchase event.
         
         Sends all Facebook-recommended parameters including:
         - User data: email, first/last name, external_id, client_ip, user_agent, fbp, fbc
-        - Custom data: value, currency
+        - Custom data: value, currency, content_name, content_ids
         - Event data: event_source_url
         - Event ID: for deduplication
         
@@ -467,6 +469,9 @@ class FacebookConversionsService:
         custom_data = self._get_custom_data(
             currency=currency,
             value=value,
+            content_name=content_name,
+            content_ids=content_ids,
+            content_type="product",
         )
         
         return await self.send_event(

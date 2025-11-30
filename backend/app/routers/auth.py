@@ -50,6 +50,9 @@ class SignUpRequest(BaseModel):
     fbc: Optional[str] = None
     ttp: Optional[str] = None
     ttclid: Optional[str] = None
+    gclid: Optional[str] = None
+    gbraid: Optional[str] = None
+    wbraid: Optional[str] = None
 
 class SignInRequest(BaseModel):
     email: EmailStr
@@ -121,6 +124,10 @@ async def signup(
             fbc = signup_request.fbc
             ttp = signup_request.ttp
             ttclid = signup_request.ttclid
+            # Google Ads
+            gclid = signup_request.gclid
+            gbraid = signup_request.gbraid
+            wbraid = signup_request.wbraid
             
             if not user_profile:
                 user_profile = UserProfile(
@@ -134,6 +141,9 @@ async def signup(
                     signup_fbc=fbc,
                     signup_ttp=ttp,
                     signup_ttclid=ttclid,
+                    signup_gclid=gclid,
+                    signup_gbraid=gbraid,
+                    signup_wbraid=wbraid,
                 )
                 session.add(user_profile)
                 await session.commit()
@@ -146,6 +156,9 @@ async def signup(
                 user_profile.signup_fbc = fbc
                 user_profile.signup_ttp = ttp
                 user_profile.signup_ttclid = ttclid
+                user_profile.signup_gclid = gclid
+                user_profile.signup_gbraid = gbraid
+                user_profile.signup_wbraid = wbraid
                 session.add(user_profile)
                 await session.commit()
             
@@ -153,9 +166,11 @@ async def signup(
             try:
                 from app.services.facebook_conversions import FacebookConversionsService
                 from app.services.tiktok_conversions import TikTokConversionsService
+                from app.services.google_conversions import GoogleAdsConversionsService
                 
                 conversions_service = FacebookConversionsService()
                 tiktok_service = TikTokConversionsService()
+                google_service = GoogleAdsConversionsService()
                 
                 # Extract first and last name from display_name if available
                 first_name = None
@@ -200,6 +215,14 @@ async def signup(
                     event_id=event_id,
                     ttp=ttp,
                     ttclid=ttclid,
+                ))
+                
+                # Google Ads tracking
+                asyncio.create_task(google_service.track_complete_registration(
+                    email=user_profile.email,
+                    gclid=gclid,
+                    gbraid=gbraid,
+                    wbraid=wbraid
                 ))
             except Exception as e:
                 logger.warning(f"Failed to track CompleteRegistration event for user: {str(e)}")
@@ -911,6 +934,9 @@ class TrackingData(BaseModel):
     fbc: Optional[str] = None
     ttp: Optional[str] = None
     ttclid: Optional[str] = None
+    gclid: Optional[str] = None
+    gbraid: Optional[str] = None
+    wbraid: Optional[str] = None
     user_agent: Optional[str] = None
 
 class OAuthExchangeRequest(BaseModel):
@@ -1147,6 +1173,10 @@ class CompleteRegistrationRequest(BaseModel):
     # TikTok cookies
     ttp: Optional[str] = None
     ttclid: Optional[str] = None
+    # Google Ads
+    gclid: Optional[str] = None
+    gbraid: Optional[str] = None
+    wbraid: Optional[str] = None
     # Browser info
     user_agent: Optional[str] = None
 
@@ -1172,6 +1202,7 @@ async def oauth_complete_registration(
     try:
         from app.services.facebook_conversions import FacebookConversionsService
         from app.services.tiktok_conversions import TikTokConversionsService
+        from app.services.google_conversions import GoogleAdsConversionsService
         import asyncio
         import time
         
@@ -1223,6 +1254,7 @@ async def oauth_complete_registration(
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
+        google_service = GoogleAdsConversionsService()
         
         # Extract first and last name from display_name
         first_name = None
@@ -1254,7 +1286,7 @@ async def oauth_complete_registration(
         
         # Use tracking_data from request body (preferred - works cross-domain)
         if tracking_data:
-            logger.info(f"📊 [OAUTH COMPLETE-REGISTRATION] Received tracking_data: ttp={'✓' if tracking_data.ttp else '✗'}, ttclid={'✓' if tracking_data.ttclid else '✗'}, fbp={'✓' if tracking_data.fbp else '✗'}")
+            logger.info(f"📊 [OAUTH COMPLETE-REGISTRATION] Received tracking_data: ttp={'✓' if tracking_data.ttp else '✗'}, ttclid={'✓' if tracking_data.ttclid else '✗'}, fbp={'✓' if tracking_data.fbp else '✗'}, gclid={'✓' if tracking_data.gclid else '✗'}")
             if tracking_data.fbp:
                 fbp = tracking_data.fbp
             if tracking_data.fbc:
@@ -1274,20 +1306,37 @@ async def oauth_complete_registration(
             current_user.signup_fbp = fbp
             current_user.signup_fbc = fbc
             
-            # Define TikTok variables before usage
+            # Define TikTok and Google variables before usage
             ttp = None
             ttclid = None
+            gclid = None
+            gbraid = None
+            wbraid = None
+            
             if http_request:
                 ttp = http_request.cookies.get("_ttp")
                 ttclid = http_request.cookies.get("_ttclid") or http_request.cookies.get("ttclid")
+                gclid = http_request.cookies.get("gclid") or http_request.cookies.get("_gcl_aw") or http_request.query_params.get("gclid")
+                gbraid = http_request.cookies.get("gbraid") or http_request.query_params.get("gbraid")
+                wbraid = http_request.cookies.get("wbraid") or http_request.query_params.get("wbraid")
+                
             if tracking_data:
                 if hasattr(tracking_data, 'ttp') and tracking_data.ttp:
                     ttp = tracking_data.ttp
                 if hasattr(tracking_data, 'ttclid') and tracking_data.ttclid:
                     ttclid = tracking_data.ttclid
+                if hasattr(tracking_data, 'gclid') and tracking_data.gclid:
+                    gclid = tracking_data.gclid
+                if hasattr(tracking_data, 'gbraid') and tracking_data.gbraid:
+                    gbraid = tracking_data.gbraid
+                if hasattr(tracking_data, 'wbraid') and tracking_data.wbraid:
+                    wbraid = tracking_data.wbraid
             
             current_user.signup_ttp = ttp
             current_user.signup_ttclid = ttclid
+            current_user.signup_gclid = gclid
+            current_user.signup_gbraid = gbraid
+            current_user.signup_wbraid = wbraid
             session.add(current_user)
             await session.commit()
         
@@ -1321,6 +1370,14 @@ async def oauth_complete_registration(
             event_id=event_id,
             ttp=ttp,
             ttclid=ttclid,
+        ))
+        
+        # Google Ads tracking
+        asyncio.create_task(google_service.track_complete_registration(
+            email=current_user.email,
+            gclid=gclid,
+            gbraid=gbraid,
+            wbraid=wbraid
         ))
         
         logger.info(f"✅ [OAUTH COMPLETE-REGISTRATION] CompleteRegistration event queued for new user")

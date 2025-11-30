@@ -477,7 +477,7 @@ async def submit_text_to_video(
             },
             status="pending",
             estimated_credit_cost=estimated_credit_cost,
-            actual_credit_cost=0,
+            actual_credit_cost=estimated_credit_cost, # Set actual cost immediately
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
@@ -485,6 +485,18 @@ async def submit_text_to_video(
         session.add(render_job)
         await session.commit()
         await session.refresh(render_job)
+        
+        # Deduct credits when job is submitted
+        await credits_service.spend_credits(
+            user_id=current_user.id,
+            amount=estimated_credit_cost,
+            reason="text_to_video_generation",
+            metadata={
+                "job_id": str(render_job.id),
+                "task_id": task_id,
+                "model": model
+            }
+        )
         
         logger.info(f"Render job created in database: job_id={render_job.id}, task_id={task_id}")
         
@@ -621,20 +633,18 @@ async def get_text_to_video_status(
         
         render_job.updated_at = datetime.utcnow()
         
-        # If completed, deduct credits
-        if mapped_status == "completed" and render_job.actual_credit_cost == 0:
-            # Use the estimated cost stored in the job record
-            actual_cost = render_job.estimated_credit_cost
-            render_job.actual_credit_cost = actual_cost
-            
+        # If failed, refund credits
+        if mapped_status == "failed" and render_job.actual_credit_cost > 0:
+            refund_amount = render_job.actual_credit_cost
             credits_service = CreditsService(session)
-            await credits_service.spend_credits(
+            await credits_service.add_credits(
                 user_id=current_user.id,
-                amount=actual_cost,
-                reason="text_to_video_generation",
-                metadata={"job_id": str(job_id), "task_id": wavespeed_task_id}
+                amount=refund_amount,
+                reason="text_to_video_refund",
+                metadata={"job_id": str(job_id), "reason": "generation_failed"}
             )
-            logger.info(f"Deducted {actual_cost} credits for completed job {job_id}")
+            render_job.actual_credit_cost = 0
+            logger.info(f"Refunded {refund_amount} credits for failed job {job_id}")
         
         session.add(render_job)
         await session.commit()
@@ -774,24 +784,23 @@ async def list_text_to_video_jobs(
                                 
                             if should_commit:
                                 job.updated_at = datetime.utcnow()
+                                
+                                # If failed, refund credits
+                                if mapped_status == "failed" and job.actual_credit_cost > 0:
+                                    refund_amount = job.actual_credit_cost
+                                    credits_service = CreditsService(session)
+                                    await credits_service.add_credits(
+                                        user_id=current_user.id,
+                                        amount=refund_amount,
+                                        reason="text_to_video_refund",
+                                        metadata={"job_id": str(job.id), "reason": "generation_failed"}
+                                    )
+                                    job.actual_credit_cost = 0
+                                    logger.info(f"Refunded {refund_amount} credits for failed job {job.id}")
+                                
                                 session.add(job)
                                 await session.commit()
                                 logger.info(f"Updated job {job.id} status to {mapped_status}")
-                                
-                                # If newly completed, deduct credits if not already done
-                                if mapped_status == "completed" and job.actual_credit_cost == 0:
-                                    actual_cost = job.estimated_credit_cost
-                                    job.actual_credit_cost = actual_cost
-                                    credits_service = CreditsService(session)
-                                    await credits_service.spend_credits(
-                                        user_id=current_user.id,
-                                        amount=actual_cost,
-                                        reason="text_to_video_generation",
-                                        metadata={"job_id": str(job.id), "task_id": wavespeed_task_id}
-                                    )
-                                    session.add(job)
-                                    await session.commit()
-                                    logger.info(f"Deducted {actual_cost} credits for completed job {job.id}")
                                     
                         except Exception as e:
                             logger.warning(f"Failed to check status for job {job.id}: {e}")

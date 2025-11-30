@@ -61,6 +61,11 @@ async def create_checkout_session(
     ttp = request.cookies.get("_ttp")
     ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
     
+    # Google Ads cookies/params
+    gclid = request.query_params.get("gclid") or request.cookies.get("gclid") or request.cookies.get("_gcl_aw")
+    gbraid = request.query_params.get("gbraid") or request.cookies.get("gbraid")
+    wbraid = request.query_params.get("wbraid") or request.cookies.get("wbraid")
+    
     # If fbc cookie is not set but fbclid is in URL, create fbc from fbclid
     # Per Facebook docs: fbc format is fb.1.{timestamp}.{fbclid}
     if not fbc:
@@ -93,6 +98,9 @@ async def create_checkout_session(
         fbc=fbc,
         ttp=ttp,
         ttclid=ttclid,
+        gclid=gclid,
+        gbraid=gbraid,
+        wbraid=wbraid,
     )
     return CheckoutSessionResponse(url=url)
 
@@ -223,6 +231,7 @@ async def track_initiate_checkout(
     try:
         from app.services.facebook_conversions import FacebookConversionsService
         from app.services.tiktok_conversions import TikTokConversionsService
+        from app.services.google_conversions import GoogleAdsConversionsService
         
         # Get client IP and user agent
         client_ip = get_client_ip(request)
@@ -236,8 +245,14 @@ async def track_initiate_checkout(
         ttp = request.cookies.get("_ttp")
         ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
         
+        # Google Ads
+        gclid = request.query_params.get("gclid") or request.cookies.get("gclid") or request.cookies.get("_gcl_aw")
+        gbraid = request.query_params.get("gbraid") or request.cookies.get("gbraid")
+        wbraid = request.query_params.get("wbraid") or request.cookies.get("wbraid")
+        
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
+        google_service = GoogleAdsConversionsService()
         
         # Extract first and last name from display_name if available (for authenticated users)
         first_name = None
@@ -292,6 +307,16 @@ async def track_initiate_checkout(
             num_items=1 if value else None,
         ))
         
+        # Google Ads tracking
+        asyncio.create_task(google_service.track_initiate_checkout(
+            email=current_user.email if current_user else None,
+            gclid=gclid,
+            gbraid=gbraid,
+            wbraid=wbraid,
+            value=value,
+            currency=currency
+        ))
+        
         return {"status": "success"}
     except Exception as e:
         logger.warning(f"Failed to track InitiateCheckout event: {str(e)}")
@@ -309,6 +334,7 @@ async def track_view_content(
     try:
         from app.services.facebook_conversions import FacebookConversionsService
         from app.services.tiktok_conversions import TikTokConversionsService
+        from app.services.google_conversions import GoogleAdsConversionsService
         
         # Get client IP and user agent
         client_ip = get_client_ip(request)
@@ -322,6 +348,11 @@ async def track_view_content(
         ttp = request.cookies.get("_ttp")
         ttclid = request.cookies.get("_ttclid")
         
+        # Google Ads
+        gclid = request.query_params.get("gclid") or request.cookies.get("gclid") or request.cookies.get("_gcl_aw")
+        gbraid = request.query_params.get("gbraid") or request.cookies.get("gbraid")
+        wbraid = request.query_params.get("wbraid") or request.cookies.get("wbraid")
+        
         # Get event_source_url from query params or use referer
         event_source_url = request.query_params.get("url") or request.headers.get("referer") or f"{settings.FRONTEND_URL}/"
         
@@ -329,6 +360,7 @@ async def track_view_content(
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
+        google_service = GoogleAdsConversionsService()
         
         # Track event (fire and forget)
         import asyncio
@@ -354,6 +386,14 @@ async def track_view_content(
             ttclid=ttclid,
         ))
         
+        # Google Ads tracking
+        asyncio.create_task(google_service.track_view_content(
+            email=current_user.email if current_user else None,
+            gclid=gclid,
+            gbraid=gbraid,
+            wbraid=wbraid
+        ))
+        
         logger.info(f"Triggered ViewContent event tracking for URL: {event_source_url}")
         
         return {"status": "success"}
@@ -373,6 +413,7 @@ async def track_add_to_cart(
     try:
         from app.services.facebook_conversions import FacebookConversionsService
         from app.services.tiktok_conversions import TikTokConversionsService
+        from app.services.google_conversions import GoogleAdsConversionsService
         
         # Get client IP and user agent
         client_ip = get_client_ip(request)
@@ -386,6 +427,11 @@ async def track_add_to_cart(
         ttp = request.cookies.get("_ttp")
         ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
         
+        # Google Ads
+        gclid = request.query_params.get("gclid") or request.cookies.get("gclid") or request.cookies.get("_gcl_aw")
+        gbraid = request.query_params.get("gbraid") or request.cookies.get("gbraid")
+        wbraid = request.query_params.get("wbraid") or request.cookies.get("wbraid")
+        
         # Get event_source_url from query params or use referer
         event_source_url = request.query_params.get("url") or request.headers.get("referer") or f"{settings.FRONTEND_URL}/upgrade"
         
@@ -393,6 +439,7 @@ async def track_add_to_cart(
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
+        google_service = GoogleAdsConversionsService()
         
         # Extract first and last name from display_name if available (for authenticated users)
         first_name = None
@@ -451,6 +498,16 @@ async def track_add_to_cart(
             event_id=event_id,
             ttp=ttp,  # TikTok cookie for attribution
             ttclid=ttclid,  # TikTok click ID for ad attribution
+        ))
+        
+        # Google Ads tracking
+        asyncio.create_task(google_service.track_add_to_cart(
+            email=current_user.email if current_user else None,
+            gclid=gclid,
+            gbraid=gbraid,
+            wbraid=wbraid,
+            value=None,
+            currency="USD"
         ))
         
         logger.info(f"Triggered AddToCart event tracking for URL: {event_source_url}")

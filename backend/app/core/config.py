@@ -99,6 +99,22 @@ class Settings(BaseSettings):
     TIKTOK_PIXEL_ID: Optional[str] = None  # TikTok Pixel ID (e.g., "D4JVLBBC77U4IAHDMKB0")
     TIKTOK_ACCESS_TOKEN: Optional[str] = None  # TikTok Events API Access Token
 
+    # Google Ads Conversions API
+    GOOGLE_ADS_DEVELOPER_TOKEN: Optional[str] = None
+    GOOGLE_ADS_CUSTOMER_ID: Optional[str] = None  # "123-456-7890" or "1234567890"
+    GOOGLE_ADS_CLIENT_ID: Optional[str] = None    # OAuth Client ID
+    GOOGLE_ADS_CLIENT_SECRET: Optional[str] = None # OAuth Client Secret
+    GOOGLE_ADS_REFRESH_TOKEN: Optional[str] = None # OAuth Refresh Token
+    
+    # Google Ads Conversion Action Resource Names (or IDs)
+    # Format: "customers/{customer_id}/conversionActions/{conversion_action_id}"
+    GOOGLE_ADS_CONVERSION_ACTION_PURCHASE: Optional[str] = None
+    GOOGLE_ADS_CONVERSION_ACTION_SIGNUP: Optional[str] = None
+    GOOGLE_ADS_CONVERSION_ACTION_ADD_TO_CART: Optional[str] = None
+    GOOGLE_ADS_CONVERSION_ACTION_INITIATE_CHECKOUT: Optional[str] = None
+    GOOGLE_ADS_CONVERSION_ACTION_VIEW_CONTENT: Optional[str] = None
+    GOOGLE_ADS_CONVERSION_ACTION_START_TRIAL: Optional[str] = None
+
     model_config = SettingsConfigDict(case_sensitive=True, env_file=".env", extra="ignore")
 
 settings = Settings()

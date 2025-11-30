@@ -795,6 +795,30 @@ async def get_image_generation_jobs(
                             if wavespeed_status == "failed":
                                 job.status = "failed"
                                 job.error_message = task_data.get('error', 'Unknown error')
+                                
+                                # Refund credits for failed job
+                                if job.actual_credit_cost == 0: # Check if we haven't refunded already (though actual_cost is 0 by default in this file, we should probably check estimated or just force it)
+                                    # In image.py, estimated_credit_cost is stored. actual_credit_cost is 0 in db model default but likely 0 here.
+                                    # Wait, in the other files I set actual_credit_cost = estimated_credit_cost when charging.
+                                    # In image.py submit(), actual_credit_cost is set to 0.
+                                    # And spend_credits is called, but the job record isn't updated with the spent amount.
+                                    # This is a small inconsistency. 
+                                    # For now, I will use estimated_credit_cost for the refund amount, 
+                                    # as that's what was charged in submit().
+                                    refund_amount = int(job.estimated_credit_cost) if job.estimated_credit_cost == int(job.estimated_credit_cost) else int(job.estimated_credit_cost) + 1
+                                    
+                                    try:
+                                        credits_service = CreditsService(session)
+                                        await credits_service.add_credits(
+                                            user_id=current_user.id,
+                                            amount=refund_amount,
+                                            reason="image_generation_refund",
+                                            metadata={"job_id": str(job.id), "reason": "generation_failed"}
+                                        )
+                                        logger.info(f"Refunded {refund_amount} credits for failed job {job.id}")
+                                    except Exception as e:
+                                        logger.error(f"Failed to refund credits for job {job.id}: {e}")
+
                                 session.add(job)
                                 await session.commit()
                                 await session.refresh(job)
@@ -926,6 +950,21 @@ async def get_image_generation_job(
                     elif wavespeed_status == "failed":
                         job.status = "failed"
                         job.error_message = task_data.get('error', 'Unknown error')
+                        
+                        # Refund credits for failed job
+                        refund_amount = int(job.estimated_credit_cost) if job.estimated_credit_cost == int(job.estimated_credit_cost) else int(job.estimated_credit_cost) + 1
+                        try:
+                            credits_service = CreditsService(session)
+                            await credits_service.add_credits(
+                                user_id=current_user.id,
+                                amount=refund_amount,
+                                reason="image_generation_refund",
+                                metadata={"job_id": str(job.id), "reason": "generation_failed"}
+                            )
+                            logger.info(f"Refunded {refund_amount} credits for failed job {job.id}")
+                        except Exception as e:
+                            logger.error(f"Failed to refund credits for job {job.id}: {e}")
+                            
                     elif wavespeed_status == "processing":
                         job.status = "running"
                     
