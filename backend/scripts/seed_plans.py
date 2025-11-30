@@ -38,7 +38,7 @@ PLANS = [
         "display_name": "Free Trial",
         "amount_cents": 100,  # $1.00 one-time trial fee (not recurring)
         "interval": "one_time",  # One-time payment, not a subscription
-        "credits_per_month": 50,  # 50 credits for trial
+        "credits_per_month": 70,  # 70 credits for trial
         "is_trial_plan": True,  # Special flag for trial plan
     },
     {
@@ -116,8 +116,8 @@ async def seed_plans():
                 
                 if existing_plan:
                     if is_trial_plan:
-                        print(f"Trial plan {plan_config['name']} already exists, skipping...")
-                        continue
+                        print(f"Trial plan {plan_config['name']} already exists, checking for updates...")
+                        # continue
                     # Check if the Stripe price ID is valid
                     price_id_valid = False
                     try:
@@ -160,7 +160,7 @@ async def seed_plans():
                     if is_trial_plan:
                         # For trial plan, just update credits if needed
                         existing_plan.credits_per_month = plan_config["credits_per_month"]
-                        existing_plan.trial_credits = 50
+                        existing_plan.trial_credits = 70
                         session.add(existing_plan)
                         await session.commit()
                         print(f"[OK] Updated trial plan: {plan_config['display_name']} - ${plan_config['amount_cents']/100} one-time - {plan_config['credits_per_month']} credits (3-day trial)")
@@ -169,7 +169,7 @@ async def seed_plans():
                         existing_plan.stripe_price_id = price_id
                         existing_plan.trial_days = 3
                         existing_plan.trial_amount_cents = 100
-                        existing_plan.trial_credits = 50  # 50 credits for trial
+                        existing_plan.trial_credits = 70  # 70 credits for trial
                         existing_plan.credits_per_month = plan_config["credits_per_month"]
                         existing_plan.amount_cents = plan_config["amount_cents"]
                         session.add(existing_plan)
@@ -177,7 +177,7 @@ async def seed_plans():
                         if is_trial_plan:
                             print(f"[OK] Updated trial plan: {plan_config['display_name']} - ${plan_config['amount_cents']/100} one-time - {plan_config['credits_per_month']} credits (3-day trial)")
                         else:
-                            print(f"[OK] Updated plan: {plan_config['display_name']} - ${plan_config['amount_cents']/100}/{plan_config['interval']} - {plan_config['credits_per_month']} credits/month (Trial: 50 credits)")
+                            print(f"[OK] Updated plan: {plan_config['display_name']} - ${plan_config['amount_cents']/100}/{plan_config['interval']} - {plan_config['credits_per_month']} credits/month (Trial: 70 credits)")
                             print(f"  New Stripe Price ID: {price_id}")
                 else:
                     # Create plan in database
@@ -192,7 +192,7 @@ async def seed_plans():
                         currency="usd",
                         trial_days=3,  # 3-day trial
                         trial_amount_cents=100,  # $1.00 trial
-                        trial_credits=50,  # 50 credits during trial
+                        trial_credits=70,  # 70 credits during trial
                         is_active=True,
                         created_at=datetime.utcnow(),
                     )

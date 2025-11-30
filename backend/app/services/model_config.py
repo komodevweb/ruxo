@@ -161,40 +161,6 @@ class ModelConfig:
 
 # Model configurations
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
-    "wan-2.5": ModelConfig(
-        provider=ModelProvider.WAN_2_5,
-        name="wan-2.5",
-        display_name="Wan 2.5",
-        api_endpoint="/alibaba/wan-2.5/text-to-video",
-        supported_resolutions=["832*480", "480*832", "1280*720", "720*1280", "1920*1080", "1080*1920"],
-        supported_durations=[5, 10],
-        supports_audio=True,
-        supports_negative_prompt=True,
-        supports_prompt_expansion=True,
-        credit_per_second={"480p": 5, "720p": 10, "1080p": 15},
-        default_resolution="1280*720",
-        default_duration=5,
-        description="High-quality text-to-video with audio sync",
-        icon="/images/logos/wan-logo.svg"
-    ),
-    "google-veo-3": ModelConfig(
-        provider=ModelProvider.GOOGLE_VEO_3,
-        name="google-veo-3",
-        display_name="Google Veo 3",
-        api_endpoint="/google/veo3",
-        supported_resolutions=["1280*720", "720*1280", "1920*1080", "1080*1920"],  # For display
-        supported_durations=[4, 6, 8],
-        supports_audio=False,  # Veo 3 generates audio automatically, doesn't accept audio uploads
-        supports_negative_prompt=True,
-        supports_prompt_expansion=False,
-        credit_per_second={},  # Fixed pricing: $3.2 with audio = 32 credits, $1.2 without = 12 credits (handled in get_credit_cost)
-        default_resolution="1280*720",
-        default_duration=8,
-        description="Advanced video generation with native audio support",
-        icon="/images/logos/icons8-google-logo-48.svg",
-        uses_aspect_ratio=True,
-        supported_aspect_ratios=["16:9", "9:16"]
-    ),
     "google-veo-3.1": ModelConfig(
         provider=ModelProvider.GOOGLE_VEO_3_1,
         name="google-veo-3.1",
@@ -212,6 +178,22 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
         icon="/images/logos/icons8-google-logo-48.svg",
         uses_aspect_ratio=True,  # Veo 3.1 uses aspect_ratio instead of size
         supported_aspect_ratios=["16:9", "9:16"]  # Valid aspect ratios per API
+    ),
+    "wan-2.5": ModelConfig(
+        provider=ModelProvider.WAN_2_5,
+        name="wan-2.5",
+        display_name="Wan 2.5",
+        api_endpoint="/alibaba/wan-2.5/text-to-video",
+        supported_resolutions=["832*480", "480*832", "1280*720", "720*1280", "1920*1080", "1080*1920"],
+        supported_durations=[5, 10],
+        supports_audio=True,
+        supports_negative_prompt=True,
+        supports_prompt_expansion=True,
+        credit_per_second={"480p": 5, "720p": 10, "1080p": 15},
+        default_resolution="1280*720",
+        default_duration=5,
+        description="High-quality text-to-video with audio sync",
+        icon="/images/logos/wan-logo.svg"
     ),
     "openai-sora-2": ModelConfig(
         provider=ModelProvider.OPENAI_SORA_2,

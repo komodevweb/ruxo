@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class TextToVideoRequest(BaseModel):
     prompt: str
-    model: str = "wan-2.5"  # Model identifier
+    model: str = "google-veo-3.1"  # Model identifier
     size: str = "1280*720"  # 832*480, 480*832, 1280*720, 720*1280, 1920*1080, 1080*1920
     duration: int = 5  # 5 or 10
     negative_prompt: Optional[str] = None
@@ -50,7 +50,7 @@ async def get_available_models():
     """
     from app.utils.cache import get_cached, set_cached, cache_key
     
-    cache_key_str = cache_key("cache", "text-to-video", "models")
+    cache_key_str = cache_key("cache", "text-to-video", "models", "v2")
     
     # Try cache first
     cached = await get_cached(cache_key_str)

@@ -242,7 +242,7 @@ function page() {
      }, []);
 
      // Cache keys for localStorage
-     const MODELS_CACHE_KEY = 'ruxo_t2v_models';
+     const MODELS_CACHE_KEY = 'ruxo_t2v_models_v2'; // Incremented version to bust cache
      const MODELS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours (matches backend Redis cache)
      const CREDITS_CACHE_KEY = 'ruxo_t2v_credits';
      const CREDITS_CACHE_TTL = 60 * 60 * 1000; // 1 hour (matches backend Redis cache)
@@ -869,7 +869,7 @@ function page() {
                     credentials: "include",
                     body: JSON.stringify({
                          prompt: prompt,
-                         model: selectedModel?.id || "wan-2.5",
+                         model: selectedModel?.id || "google-veo-3.1",
                          size: size,
                          duration: duration,
                          negative_prompt: negativePrompt || undefined,

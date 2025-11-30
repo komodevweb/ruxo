@@ -938,7 +938,7 @@ class BillingService:
         """Handle subscription cancellation - removes all user credits.
         
         If subscription was in trial, this means trial expired without conversion.
-        Trial credits (40) expire after 3 days.
+        Trial credits (70) expire after 3 days.
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -1578,7 +1578,7 @@ class BillingService:
                 "ga_session_id": metadata.get("ga_session_id"),
             }
             
-            # Grant trial credits (40) - use the actual plan's trial_credits setting
+            # Grant trial credits (70) - use the actual plan's trial_credits setting
             await self._grant_trial_credits(subscription, plan, tracking_context)
         else:
             # Reset credits to plan amount (monthly reset)
@@ -1717,21 +1717,21 @@ class BillingService:
         old_balance = wallet.balance_credits
         
         # Set balance to trial credits (replace any existing credits)
-        # FORCE 50 CREDITS for all trials as requested
-        wallet.balance_credits = 50 # plan.trial_credits
+        # FORCE 70 CREDITS for all trials as requested
+        wallet.balance_credits = 70 # plan.trial_credits
         
         # Record transaction
         from app.models.credits import CreditTransaction
-        credit_amount = 50 - old_balance # plan.trial_credits - old_balance
+        credit_amount = 70 - old_balance # plan.trial_credits - old_balance
         transaction = CreditTransaction(
             user_id=subscription.user_id,
             amount=abs(credit_amount),
             direction="credit" if credit_amount > 0 else "debit",
             reason="trial_start",
-            metadata_json=f'{{"plan_name": "{plan.name}", "old_balance": {old_balance}, "new_balance": 50, "trial_credits": 50}}'
+            metadata_json=f'{{"plan_name": "{plan.name}", "old_balance": {old_balance}, "new_balance": 70, "trial_credits": 70}}'
         )
         
-        logger.info(f"[TRIAL CREDITS] Set credits for user {subscription.user_id}: {old_balance} -> 50 (trial credits for plan: {plan.name})")
+        logger.info(f"[TRIAL CREDITS] Set credits for user {subscription.user_id}: {old_balance} -> 70 (trial credits for plan: {plan.name})")
         
         self.session.add(transaction)
         self.session.add(wallet)

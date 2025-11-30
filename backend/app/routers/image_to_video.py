@@ -24,39 +24,6 @@ logger = logging.getLogger(__name__)
 
 # Image-to-video model configurations
 IMAGE_TO_VIDEO_MODELS = {
-    "wan-2.5": {
-        "id": "wan-2.5",
-        "name": "Wan 2.5 Image To Video",
-        "display_name": "Wan 2.5 Image To Video",
-        "description": "High-quality image-to-video with audio sync",
-        "icon": "/images/logos/wan-logo.svg",
-        "supported_resolutions": ["480p", "720p", "1080p"],
-        "supported_durations": [3, 4, 5, 6, 7, 8, 9, 10],
-        "supports_audio": True,
-        "supports_negative_prompt": True,
-        "supports_prompt_expansion": True,
-        "default_resolution": "720p",
-        "default_duration": 5,
-        "uses_aspect_ratio": False,
-    },
-    "google-veo-3-fast": {
-        "id": "google-veo-3-fast",
-        "name": "Google Veo 3 Fast Image To Video",
-        "display_name": "Google Veo 3 Fast I2V",
-        "description": "High-speed cinematic image-to-video with native audio",
-        "icon": "/images/logos/icons8-google-logo-48.svg",
-        "supported_resolutions": ["720p", "1080p"],
-        "supported_durations": [4, 6, 8],
-        "supports_audio": False,  # Native audio generation, not upload
-        "supports_negative_prompt": True,
-        "supports_prompt_expansion": False,
-        "default_resolution": "720p",
-        "default_duration": 8,
-        "uses_aspect_ratio": True,
-        "supported_aspect_ratios": ["16:9", "9:16"],
-        "default_aspect_ratio": "16:9",
-        "credit_by_duration": {4: 32, 6: 50, 8: 64},  # Same price for 720p and 1080p: 4s=32, 6s=50, 8s=64 credits
-    },
     "google-veo-3.1-fast": {
         "id": "google-veo-3.1-fast",
         "name": "Google Veo 3.1 Fast Image To Video",
@@ -74,6 +41,21 @@ IMAGE_TO_VIDEO_MODELS = {
         "supported_aspect_ratios": ["16:9", "9:16"],
         "default_aspect_ratio": "16:9",
         "credit_by_duration": {4: 32, 6: 50, 8: 64},  # Same price for 720p and 1080p: 4s=32, 6s=50, 8s=64 credits
+    },
+    "wan-2.5": {
+        "id": "wan-2.5",
+        "name": "Wan 2.5 Image To Video",
+        "display_name": "Wan 2.5 Image To Video",
+        "description": "High-quality image-to-video with audio sync",
+        "icon": "/images/logos/wan-logo.svg",
+        "supported_resolutions": ["480p", "720p", "1080p"],
+        "supported_durations": [3, 4, 5, 6, 7, 8, 9, 10],
+        "supports_audio": True,
+        "supports_negative_prompt": True,
+        "supports_prompt_expansion": True,
+        "default_resolution": "720p",
+        "default_duration": 5,
+        "uses_aspect_ratio": False,
     },
     "openai-sora-2": {
         "id": "openai-sora-2",
@@ -167,7 +149,7 @@ IMAGE_TO_VIDEO_MODELS = {
 class ImageToVideoRequest(BaseModel):
     prompt: str
     image_url: str
-    model: str = "wan-2.5"
+    model: str = "google-veo-3.1-fast"
     resolution: str = "720p"  # 480p, 720p, 1080p
     duration: int = 5  # 3-10
     negative_prompt: Optional[str] = None
@@ -256,7 +238,7 @@ async def get_available_models():
     """
     from app.utils.cache import get_cached, set_cached, cache_key
     
-    cache_key_str = cache_key("cache", "image-to-video", "models")
+    cache_key_str = cache_key("cache", "image-to-video", "models", "v2")
     
     # Try cache first
     cached = await get_cached(cache_key_str)
