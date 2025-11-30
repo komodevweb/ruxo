@@ -66,6 +66,24 @@ async def create_checkout_session(
     gbraid = request.query_params.get("gbraid") or request.cookies.get("gbraid")
     wbraid = request.query_params.get("wbraid") or request.cookies.get("wbraid")
     
+    # GA4 cookies
+    ga_client_id = None
+    ga_session_id = None
+    ga_cookie = request.cookies.get("_ga")
+    if ga_cookie:
+        parts = ga_cookie.split('.')
+        if len(parts) >= 2:
+            ga_client_id = '.'.join(parts[-2:])
+        else:
+            ga_client_id = ga_cookie
+    # Try to find session ID cookie
+    for cookie_name, cookie_value in request.cookies.items():
+        if cookie_name.startswith("_ga_"):
+            parts = cookie_value.split(".")
+            if len(parts) > 2:
+                ga_session_id = parts[2]
+                break
+    
     # If fbc cookie is not set but fbclid is in URL, create fbc from fbclid
     # Per Facebook docs: fbc format is fb.1.{timestamp}.{fbclid}
     if not fbc:
@@ -76,13 +94,15 @@ async def create_checkout_session(
             logger.info(f"💳 [CHECKOUT] Created fbc from fbclid URL parameter: {fbc}")
     
     logger.info(f"💳 [CHECKOUT] Creating checkout session for user {current_user.id}")
-    logger.info(f"💳 [CHECKOUT] Captured tracking context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}..., fbp={fbp}, fbc={fbc}")
+    logger.info(f"💳 [CHECKOUT] Captured tracking context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}..., fbp={fbp}, fbc={fbc}, ga_client_id={ga_client_id}")
     
     # Store tracking context in user profile for fallback (in case metadata is missing in webhook)
     current_user.last_checkout_ip = client_ip
     current_user.last_checkout_user_agent = client_user_agent
     current_user.last_checkout_fbp = fbp
     current_user.last_checkout_fbc = fbc
+    current_user.last_checkout_ga_client_id = ga_client_id
+    current_user.last_checkout_ga_session_id = ga_session_id
     current_user.last_checkout_timestamp = datetime.utcnow()
     session.add(current_user)
     await session.commit()
@@ -101,6 +121,8 @@ async def create_checkout_session(
         gclid=gclid,
         gbraid=gbraid,
         wbraid=wbraid,
+        ga_client_id=ga_client_id,
+        ga_session_id=ga_session_id,
     )
     return CheckoutSessionResponse(url=url)
 
@@ -231,7 +253,7 @@ async def track_initiate_checkout(
     try:
         from app.services.facebook_conversions import FacebookConversionsService
         from app.services.tiktok_conversions import TikTokConversionsService
-        from app.services.google_conversions import GoogleAdsConversionsService
+        from app.services.ga4_service import GA4Service
         
         # Get client IP and user agent
         client_ip = get_client_ip(request)
@@ -245,14 +267,27 @@ async def track_initiate_checkout(
         ttp = request.cookies.get("_ttp")
         ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
         
-        # Google Ads
-        gclid = request.query_params.get("gclid") or request.cookies.get("gclid") or request.cookies.get("_gcl_aw")
-        gbraid = request.query_params.get("gbraid") or request.cookies.get("gbraid")
-        wbraid = request.query_params.get("wbraid") or request.cookies.get("wbraid")
+        # GA4 cookies
+        ga_client_id = None
+        ga_session_id = None
+        ga_cookie = request.cookies.get("_ga")
+        if ga_cookie:
+            parts = ga_cookie.split('.')
+            if len(parts) >= 2:
+                ga_client_id = '.'.join(parts[-2:])
+            else:
+                ga_client_id = ga_cookie
+        # Try to find session ID cookie
+        for cookie_name, cookie_value in request.cookies.items():
+            if cookie_name.startswith("_ga_"):
+                parts = cookie_value.split(".")
+                if len(parts) > 2:
+                    ga_session_id = parts[2]
+                    break
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
-        google_service = GoogleAdsConversionsService()
+        ga4_service = GA4Service()
         
         # Extract first and last name from display_name if available (for authenticated users)
         first_name = None
@@ -307,15 +342,19 @@ async def track_initiate_checkout(
             num_items=1 if value else None,
         ))
         
-        # Google Ads tracking
-        asyncio.create_task(google_service.track_initiate_checkout(
-            email=current_user.email if current_user else None,
-            gclid=gclid,
-            gbraid=gbraid,
-            wbraid=wbraid,
-            value=value,
-            currency=currency
-        ))
+        # GA4 tracking
+        if ga_client_id:
+            asyncio.create_task(ga4_service.track_begin_checkout(
+                client_id=ga_client_id,
+                value=value or 0,
+                currency=currency,
+                user_id=str(current_user.id) if current_user else None,
+                session_id=ga_session_id,
+                client_ip=client_ip,
+                user_agent=client_user_agent,
+                page_location=f"{settings.FRONTEND_URL}/upgrade",
+                items=[{"item_id": content_ids[0] if content_ids else "subscription", "item_name": content_name or "Subscription", "price": value or 0, "quantity": 1}] if content_ids or content_name else None
+            ))
         
         return {"status": "success"}
     except Exception as e:
@@ -334,7 +373,7 @@ async def track_view_content(
     try:
         from app.services.facebook_conversions import FacebookConversionsService
         from app.services.tiktok_conversions import TikTokConversionsService
-        from app.services.google_conversions import GoogleAdsConversionsService
+        from app.services.ga4_service import GA4Service
         
         # Get client IP and user agent
         client_ip = get_client_ip(request)
@@ -348,10 +387,22 @@ async def track_view_content(
         ttp = request.cookies.get("_ttp")
         ttclid = request.cookies.get("_ttclid")
         
-        # Google Ads
-        gclid = request.query_params.get("gclid") or request.cookies.get("gclid") or request.cookies.get("_gcl_aw")
-        gbraid = request.query_params.get("gbraid") or request.cookies.get("gbraid")
-        wbraid = request.query_params.get("wbraid") or request.cookies.get("wbraid")
+        # GA4 cookies
+        ga_client_id = None
+        ga_session_id = None
+        ga_cookie = request.cookies.get("_ga")
+        if ga_cookie:
+            parts = ga_cookie.split('.')
+            if len(parts) >= 2:
+                ga_client_id = '.'.join(parts[-2:])
+            else:
+                ga_client_id = ga_cookie
+        for cookie_name, cookie_value in request.cookies.items():
+            if cookie_name.startswith("_ga_"):
+                parts = cookie_value.split(".")
+                if len(parts) > 2:
+                    ga_session_id = parts[2]
+                    break
         
         # Get event_source_url from query params or use referer
         event_source_url = request.query_params.get("url") or request.headers.get("referer") or f"{settings.FRONTEND_URL}/"
@@ -360,7 +411,7 @@ async def track_view_content(
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
-        google_service = GoogleAdsConversionsService()
+        ga4_service = GA4Service()
         
         # Track event (fire and forget)
         import asyncio
@@ -386,13 +437,19 @@ async def track_view_content(
             ttclid=ttclid,
         ))
         
-        # Google Ads tracking
-        asyncio.create_task(google_service.track_view_content(
-            email=current_user.email if current_user else None,
-            gclid=gclid,
-            gbraid=gbraid,
-            wbraid=wbraid
-        ))
+        # GA4 tracking
+        if ga_client_id:
+            asyncio.create_task(ga4_service.track_view_item(
+                client_id=ga_client_id,
+                value=0,
+                currency="USD",
+                user_id=str(current_user.id) if current_user else None,
+                session_id=ga_session_id,
+                client_ip=client_ip,
+                user_agent=client_user_agent,
+                page_location=event_source_url,
+                items=[{"item_id": "ruxo_subscription", "item_name": "Ruxo Subscription", "price": 0, "quantity": 1}]
+            ))
         
         logger.info(f"Triggered ViewContent event tracking for URL: {event_source_url}")
         
@@ -413,7 +470,7 @@ async def track_add_to_cart(
     try:
         from app.services.facebook_conversions import FacebookConversionsService
         from app.services.tiktok_conversions import TikTokConversionsService
-        from app.services.google_conversions import GoogleAdsConversionsService
+        from app.services.ga4_service import GA4Service
         
         # Get client IP and user agent
         client_ip = get_client_ip(request)
@@ -427,10 +484,22 @@ async def track_add_to_cart(
         ttp = request.cookies.get("_ttp")
         ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
         
-        # Google Ads
-        gclid = request.query_params.get("gclid") or request.cookies.get("gclid") or request.cookies.get("_gcl_aw")
-        gbraid = request.query_params.get("gbraid") or request.cookies.get("gbraid")
-        wbraid = request.query_params.get("wbraid") or request.cookies.get("wbraid")
+        # GA4 cookies
+        ga_client_id = None
+        ga_session_id = None
+        ga_cookie = request.cookies.get("_ga")
+        if ga_cookie:
+            parts = ga_cookie.split('.')
+            if len(parts) >= 2:
+                ga_client_id = '.'.join(parts[-2:])
+            else:
+                ga_client_id = ga_cookie
+        for cookie_name, cookie_value in request.cookies.items():
+            if cookie_name.startswith("_ga_"):
+                parts = cookie_value.split(".")
+                if len(parts) > 2:
+                    ga_session_id = parts[2]
+                    break
         
         # Get event_source_url from query params or use referer
         event_source_url = request.query_params.get("url") or request.headers.get("referer") or f"{settings.FRONTEND_URL}/upgrade"
@@ -439,7 +508,7 @@ async def track_add_to_cart(
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
-        google_service = GoogleAdsConversionsService()
+        ga4_service = GA4Service()
         
         # Extract first and last name from display_name if available (for authenticated users)
         first_name = None
@@ -500,15 +569,19 @@ async def track_add_to_cart(
             ttclid=ttclid,  # TikTok click ID for ad attribution
         ))
         
-        # Google Ads tracking
-        asyncio.create_task(google_service.track_add_to_cart(
-            email=current_user.email if current_user else None,
-            gclid=gclid,
-            gbraid=gbraid,
-            wbraid=wbraid,
-            value=None,
-            currency="USD"
-        ))
+        # GA4 tracking
+        if ga_client_id:
+            asyncio.create_task(ga4_service.track_add_to_cart(
+                client_id=ga_client_id,
+                value=0,
+                currency="USD",
+                user_id=str(current_user.id) if current_user else None,
+                session_id=ga_session_id,
+                client_ip=client_ip,
+                user_agent=client_user_agent,
+                page_location=event_source_url,
+                items=[{"item_id": "ruxo_subscription", "item_name": "Ruxo Subscription Plan", "price": 0, "quantity": 1}]
+            ))
         
         logger.info(f"Triggered AddToCart event tracking for URL: {event_source_url}")
         
@@ -731,6 +804,24 @@ async def skip_trial_and_subscribe(
         ttp = request.cookies.get("_ttp")
         ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
         
+        # GA4 cookies
+        ga_client_id = None
+        ga_session_id = None
+        ga_cookie = request.cookies.get("_ga")
+        if ga_cookie:
+            parts = ga_cookie.split('.')
+            if len(parts) >= 2:
+                ga_client_id = '.'.join(parts[-2:])
+            else:
+                ga_client_id = ga_cookie
+        # Try to find session ID cookie
+        for cookie_name, cookie_value in request.cookies.items():
+            if cookie_name.startswith("_ga_"):
+                parts = cookie_value.split(".")
+                if len(parts) > 2:
+                    ga_session_id = parts[2]
+                    break
+        
         # Create checkout session with skip_trial=true
         service = BillingService(session)
         url = await service.create_checkout_session(
@@ -743,6 +834,8 @@ async def skip_trial_and_subscribe(
             fbc=fbc,
             ttp=ttp,
             ttclid=ttclid,
+            ga_client_id=ga_client_id,
+            ga_session_id=ga_session_id,
         )
         
         logger.info(f"Created skip-trial checkout for user {current_user.id}, plan {actual_plan_name}")

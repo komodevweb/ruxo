@@ -1,7 +1,10 @@
-
 # Backend environment files
 backend/.env
-
+backend/temp_env_file
 
 # Frontend environment files
 ui/.env
+
+# Logs
+logs/
+*.log

@@ -22,6 +22,8 @@ class UserProfile(SQLModel, table=True):
     signup_gclid: Optional[str] = None  # Google Click ID
     signup_gbraid: Optional[str] = None # Google GBRAID
     signup_wbraid: Optional[str] = None # Google WBRAID
+    signup_ga_client_id: Optional[str] = None  # GA4 Client ID
+    signup_ga_session_id: Optional[str] = None  # GA4 Session ID
     
     # Last checkout tracking context (for Purchase event attribution)
     # These are updated every time user initiates checkout, so we have fresh data for webhooks
@@ -34,6 +36,8 @@ class UserProfile(SQLModel, table=True):
     last_checkout_gclid: Optional[str] = None
     last_checkout_gbraid: Optional[str] = None
     last_checkout_wbraid: Optional[str] = None
+    last_checkout_ga_client_id: Optional[str] = None  # GA4 Client ID
+    last_checkout_ga_session_id: Optional[str] = None  # GA4 Session ID
     last_checkout_timestamp: Optional[datetime] = None
     
     created_at: datetime = Field(

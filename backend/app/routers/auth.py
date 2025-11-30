@@ -53,6 +53,9 @@ class SignUpRequest(BaseModel):
     gclid: Optional[str] = None
     gbraid: Optional[str] = None
     wbraid: Optional[str] = None
+    # GA4
+    ga_client_id: Optional[str] = None
+    ga_session_id: Optional[str] = None
 
 class SignInRequest(BaseModel):
     email: EmailStr
@@ -129,6 +132,28 @@ async def signup(
             gbraid = signup_request.gbraid
             wbraid = signup_request.wbraid
             
+            # GA4
+            ga_client_id = signup_request.ga_client_id
+            ga_session_id = signup_request.ga_session_id
+            
+            # Fallback to cookies if not in body
+            if not ga_client_id:
+                ga_cookie = http_request.cookies.get("_ga")
+                if ga_cookie:
+                    parts = ga_cookie.split('.')
+                    if len(parts) >= 2:
+                        ga_client_id = '.'.join(parts[-2:])
+                    else:
+                        ga_client_id = ga_cookie
+            
+            if not ga_session_id:
+                for cookie_name, cookie_value in http_request.cookies.items():
+                    if cookie_name.startswith("_ga_"):
+                        parts = cookie_value.split(".")
+                        if len(parts) > 2:
+                            ga_session_id = parts[2]
+                            break
+            
             if not user_profile:
                 user_profile = UserProfile(
                     id=user_id,
@@ -144,6 +169,8 @@ async def signup(
                     signup_gclid=gclid,
                     signup_gbraid=gbraid,
                     signup_wbraid=wbraid,
+                    signup_ga_client_id=ga_client_id,
+                    signup_ga_session_id=ga_session_id,
                 )
                 session.add(user_profile)
                 await session.commit()
@@ -159,6 +186,8 @@ async def signup(
                 user_profile.signup_gclid = gclid
                 user_profile.signup_gbraid = gbraid
                 user_profile.signup_wbraid = wbraid
+                user_profile.signup_ga_client_id = ga_client_id
+                user_profile.signup_ga_session_id = ga_session_id
                 session.add(user_profile)
                 await session.commit()
             
@@ -166,11 +195,11 @@ async def signup(
             try:
                 from app.services.facebook_conversions import FacebookConversionsService
                 from app.services.tiktok_conversions import TikTokConversionsService
-                from app.services.google_conversions import GoogleAdsConversionsService
+                from app.services.ga4_service import GA4Service
                 
                 conversions_service = FacebookConversionsService()
                 tiktok_service = TikTokConversionsService()
-                google_service = GoogleAdsConversionsService()
+                ga4_service = GA4Service()
                 
                 # Extract first and last name from display_name if available
                 first_name = None
@@ -217,13 +246,17 @@ async def signup(
                     ttclid=ttclid,
                 ))
                 
-                # Google Ads tracking
-                asyncio.create_task(google_service.track_complete_registration(
-                    email=user_profile.email,
-                    gclid=gclid,
-                    gbraid=gbraid,
-                    wbraid=wbraid
-                ))
+                # GA4 tracking
+                if ga_client_id:
+                    asyncio.create_task(ga4_service.track_sign_up(
+                        client_id=ga_client_id,
+                        user_id=str(user_profile.id),
+                        session_id=ga_session_id,
+                        client_ip=client_ip,
+                        user_agent=client_user_agent,
+                        page_location=f"{settings.FRONTEND_URL}/signup-password",
+                        method="email"
+                    ))
             except Exception as e:
                 logger.warning(f"Failed to track CompleteRegistration event for user: {str(e)}")
             
@@ -1173,10 +1206,10 @@ class CompleteRegistrationRequest(BaseModel):
     # TikTok cookies
     ttp: Optional[str] = None
     ttclid: Optional[str] = None
-    # Google Ads
-    gclid: Optional[str] = None
-    gbraid: Optional[str] = None
-    wbraid: Optional[str] = None
+ 
+    # GA4
+    ga_client_id: Optional[str] = None
+    ga_session_id: Optional[str] = None
     # Browser info
     user_agent: Optional[str] = None
 
@@ -1202,7 +1235,7 @@ async def oauth_complete_registration(
     try:
         from app.services.facebook_conversions import FacebookConversionsService
         from app.services.tiktok_conversions import TikTokConversionsService
-        from app.services.google_conversions import GoogleAdsConversionsService
+        from app.services.ga4_service import GA4Service
         import asyncio
         import time
         
@@ -1254,7 +1287,7 @@ async def oauth_complete_registration(
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
-        google_service = GoogleAdsConversionsService()
+        ga4_service = GA4Service()
         
         # Extract first and last name from display_name
         first_name = None
@@ -1337,6 +1370,12 @@ async def oauth_complete_registration(
             current_user.signup_gclid = gclid
             current_user.signup_gbraid = gbraid
             current_user.signup_wbraid = wbraid
+            
+            if tracking_data and tracking_data.ga_client_id:
+                current_user.signup_ga_client_id = tracking_data.ga_client_id
+            if tracking_data and tracking_data.ga_session_id:
+                current_user.signup_ga_session_id = tracking_data.ga_session_id
+                
             session.add(current_user)
             await session.commit()
         
@@ -1372,13 +1411,17 @@ async def oauth_complete_registration(
             ttclid=ttclid,
         ))
         
-        # Google Ads tracking
-        asyncio.create_task(google_service.track_complete_registration(
-            email=current_user.email,
-            gclid=gclid,
-            gbraid=gbraid,
-            wbraid=wbraid
-        ))
+        # GA4 tracking
+        if tracking_data and tracking_data.ga_client_id:
+            asyncio.create_task(ga4_service.track_sign_up(
+                client_id=tracking_data.ga_client_id,
+                user_id=str(current_user.id),
+                session_id=tracking_data.ga_session_id,
+                client_ip=client_ip,
+                user_agent=client_user_agent,
+                page_location=f"{settings.FRONTEND_URL}/dashboard",
+                method="google"  # Since this is OAuth callback
+            ))
         
         logger.info(f"✅ [OAUTH COMPLETE-REGISTRATION] CompleteRegistration event queued for new user")
         

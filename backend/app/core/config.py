@@ -99,6 +99,10 @@ class Settings(BaseSettings):
     TIKTOK_PIXEL_ID: Optional[str] = None  # TikTok Pixel ID (e.g., "D4JVLBBC77U4IAHDMKB0")
     TIKTOK_ACCESS_TOKEN: Optional[str] = None  # TikTok Events API Access Token
 
+    # GA4 Measurement Protocol
+    GA4_MEASUREMENT_ID: Optional[str] = None  # GA4 Measurement ID (e.g., "G-XXXXXXXXXX")
+    GA4_API_SECRET: Optional[str] = None  # GA4 Measurement Protocol API Secret
+
     # Google Ads Conversions API
     GOOGLE_ADS_DEVELOPER_TOKEN: Optional[str] = None
     GOOGLE_ADS_CUSTOMER_ID: Optional[str] = None  # "123-456-7890" or "1234567890"
