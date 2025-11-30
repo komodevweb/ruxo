@@ -111,7 +111,25 @@ async def grant_credits_to_user(user_id_str: str):
             raise
 
 if __name__ == "__main__":
-    user_id = "0c8d5a8c-4d33-4d59-a664-7cba84bf45cd"
-    print(f"Granting credits to user: {user_id}\n")
-    asyncio.run(grant_credits_to_user(user_id))
+    if len(sys.argv) > 1:
+        email = sys.argv[1]
+        print(f"Checking credits for email: {email}\n")
+        
+        # Simple async wrapper to find user by email then call grant_credits
+        async def find_and_grant(email):
+            async_session = sessionmaker(engine, class_=AsyncSessionType, expire_on_commit=False)
+            async with async_session() as session:
+                result = await session.execute(select(UserProfile).where(UserProfile.email == email))
+                user = result.scalar_one_or_none()
+                if user:
+                    print(f"Found user ID: {user.id}")
+                    await grant_credits_to_user(str(user.id))
+                else:
+                    print(f"User with email {email} not found")
+        
+        asyncio.run(find_and_grant(email))
+    else:
+        user_id = "0c8d5a8c-4d33-4d59-a664-7cba84bf45cd"
+        print(f"Granting credits to user: {user_id}\n")
+        asyncio.run(grant_credits_to_user(user_id))
 
