@@ -13,8 +13,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Ruxo - Where imagination turns real",
-  description: "Where imagination turns real",
+  title: "Ruxo - Where Imagination Turns Real",
+  description: "Ruxo - Where Imagination Turns Real",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
