@@ -570,10 +570,165 @@ class BillingService:
                         is_trial = True
                 except (ValueError, TypeError):
                     pass
+            
+            # ADDITIONAL CHECK: Check amount paid. If it's small (e.g., <= $1.00), treat as trial/verification
+            # This handles cases where a $1 charge is made for verification but status is 'active'
+            amount_total = session.get("amount_total", 0)
+            if amount_total > 0 and amount_total <= 100:  # 100 cents = $1.00
+                logger.info(f"💰 [PURCHASE TRACKING] Detected small payment ({amount_total} cents). Treating as TRIAL.")
+                is_trial = True
+
+            # IMPORTANT: Only process ONE type of event (Trial OR Purchase), never both.
+            
+            # 1. Handle Trial Tracking (StartTrial)
+            if is_trial:
+                try:
+                    from sqlalchemy.future import select
+                    from app.models.user import UserProfile
+                    
+                    logger.info("=" * 80)
+                    logger.info("🏁 [TRIAL TRACKING] Starting StartTrial event tracking")
+                    
+                    # Get user profile for email (needed for tracking)
+                    result = await self.session.execute(
+                        select(UserProfile).where(UserProfile.id == uuid.UUID(user_id))
+                    )
+                    user = result.scalar_one_or_none()
+                    
+                    if user:
+                        # Extract user details for tracking
+                        first_name = None
+                        last_name = None
+                        if user.display_name:
+                            name_parts = user.display_name.split(maxsplit=1)
+                            first_name = name_parts[0] if name_parts else None
+                            last_name = name_parts[1] if len(name_parts) > 1 else None
+                        
+                        # Get tracking context from session metadata
+                        metadata = session.get("metadata", {})
+                        client_ip = metadata.get("client_ip") or user.last_checkout_ip
+                        client_user_agent = metadata.get("client_user_agent") or user.last_checkout_user_agent
+                        fbp = metadata.get("fbp") or user.last_checkout_fbp
+                        fbc = metadata.get("fbc") or user.last_checkout_fbc
+                        ttp = metadata.get("ttp")
+                        ttclid = metadata.get("ttclid")
+                        ga_client_id = metadata.get("ga_client_id") or user.last_checkout_ga_client_id
+                        ga_session_id = metadata.get("ga_session_id") or user.last_checkout_ga_session_id
+                        
+                        currency = session.get("currency", "USD").upper()
+                        amount_total = session.get("amount_total", 0)
+                        value = amount_total / 100.0
+                        
+                        logger.info(f"🏁 [TRIAL TRACKING] User: {user.email}")
+                        logger.info(f"🏁 [TRIAL TRACKING] Value: ${value} {currency}")
+                        
+                        # Initialize services if not already done
+                        from app.services.facebook_conversions import FacebookConversionsService
+                        from app.services.tiktok_conversions import TikTokConversionsService
+                        from app.services.ga4_service import GA4Service
+                        
+                        conversions_service = FacebookConversionsService()
+                        tiktok_service = TikTokConversionsService()
+                        ga4_service = GA4Service()
+                        
+                        import asyncio
+                        # Facebook StartTrial
+                        # Check if conversions_service has track_event (it might be missing in some versions)
+                        if hasattr(conversions_service, 'track_event'):
+                            # Use a unique event_id for StartTrial deduplication
+                            event_id_dedup = f"start_trial_{session.get('id')}"
+                            
+                            asyncio.create_task(conversions_service.track_event(
+                                event_name="StartTrial",
+                                event_time=int(time.time()),
+                                user_data={
+                                    "em": [user.email],
+                                    "fn": [first_name] if first_name else None,
+                                    "ln": [last_name] if last_name else None,
+                                    "client_ip_address": client_ip,
+                                    "client_user_agent": client_user_agent,
+                                    "fbp": fbp,
+                                    "fbc": fbc,
+                                    "external_id": str(user.id)
+                                },
+                                custom_data={
+                                    "value": value,
+                                    "currency": currency,
+                                    "predicted_ltv": 0.0,
+                                    "content_name": "Trial Subscription",
+                                    "status": "trialing"
+                                },
+                                event_source_url=f"{settings.FRONTEND_URL}/",
+                                event_id=event_id_dedup
+                            ))
+                        elif hasattr(conversions_service, 'track_start_trial'):
+                             # Fallback to specific method if generic one is missing
+                             asyncio.create_task(conversions_service.track_start_trial(
+                                value=value,
+                                currency=currency,
+                                email=user.email,
+                                first_name=first_name,
+                                last_name=last_name,
+                                external_id=str(user.id),
+                                client_ip=client_ip,
+                                client_user_agent=client_user_agent,
+                                fbp=fbp,
+                                fbc=fbc,
+                                event_source_url=f"{settings.FRONTEND_URL}/",
+                                event_id=session.get("id"),
+                                content_name="Trial Subscription"
+                            ))
+                        else:
+                            logger.error("❌ [TRIAL TRACKING] FacebookConversionsService missing track_event or track_start_trial method")
+                        
+                        # TikTok StartTrial
+                        # Check if user has ttp or ttclid to avoid sending empty event if possible
+                        if ttp or ttclid:
+                            # Use event_id to deduplicate if called multiple times
+                            event_id_dedup = f"start_trial_{session.get('id')}"
+                            
+                            asyncio.create_task(tiktok_service.track_start_trial(
+                                value=value,
+                                currency=currency,
+                                email=user.email,
+                                first_name=first_name,
+                                last_name=last_name,
+                                external_id=str(user.id),
+                                client_ip=client_ip,
+                                client_user_agent=client_user_agent,
+                                event_source_url=f"{settings.FRONTEND_URL}/",
+                                event_id=event_id_dedup,
+                                ttp=ttp,
+                                ttclid=ttclid,
+                            ))
+                        else:
+                            logger.info("⚠️ [TRIAL TRACKING] Skipping TikTok StartTrial - no TTP/TTCLID found")
+                        
+                        # GA4 StartTrial
+                        if ga_client_id:
+                            asyncio.create_task(ga4_service.track_start_trial(
+                                client_id=ga_client_id,
+                                value=value,
+                                currency=currency,
+                                user_id=str(user.id),
+                                session_id=ga_session_id,
+                                client_ip=client_ip,
+                                user_agent=client_user_agent,
+                                page_location=f"{settings.FRONTEND_URL}/",
+                                items=[{"item_name": "Trial Subscription", "price": value, "quantity": 1}]
+                            ))
+                        
+                        logger.info(f"✅ [TRIAL TRACKING] StartTrial event triggered successfully for FB, TikTok, and GA4")
+                        logger.info("=" * 80)
+                
+                except Exception as e:
+                    logger.error(f"❌ [TRIAL TRACKING] Failed to track StartTrial event: {str(e)}", exc_info=True)
 
             # Only track purchase if subscription is ACTIVE (paid) and NOT a trial
             # This prevents tracking on 'incomplete' or 'past_due' subscriptions
-            if stripe_subscription.status == "active" and not is_trial:
+            # IMPORTANT: The 'is_trial' check is CRITICAL here to prevent duplicate events.
+            # If it's a trial (even if status is active like in $1 payments), we handled it above.
+            elif stripe_subscription.status == "active" and not is_trial:
                 try:
                     from app.services.facebook_conversions import FacebookConversionsService
                     from app.services.tiktok_conversions import TikTokConversionsService
@@ -732,8 +887,12 @@ class BillingService:
                         logger.info("=" * 80)
                     else:
                         logger.warning(f"⚠️  [PURCHASE TRACKING] User not found: {user_id}")
+            
                 except Exception as e:
                     logger.error(f"❌ [PURCHASE TRACKING] Failed to track Purchase event: {str(e)}", exc_info=True)
+            
+            # No else block needed for "is_trial" here because it was handled in the if/elif block above
+
         else:
             logger.warning(f"Checkout completed but no subscription_id for user {user_id}")
 
@@ -1830,85 +1989,17 @@ class BillingService:
                     if plan.trial_amount_cents > 100:
                         value = value * 0.6
                 
-                currency = "USD"
-                event_id = f"purchase_{subscription.id}_{int(time.time())}"
+                # NOTE: We skipped tracking here to avoid duplicates with _handle_checkout_completed
+                # The checkout webhook already handles tracking StartTrial events.
+                # We do NOT want to track 'Purchase' for trials here.
                 
-                fb_service = FacebookConversionsService()
-                tt_service = TikTokConversionsService()
-                ga4_service = GA4Service()
+                logger.info(f"ℹ️ [TRIAL CREDITS] Skipping conversion tracking in _grant_trial_credits to avoid duplicates (handled in checkout webhook)")
                 
-                import asyncio
-                # Facebook Purchase (Track trial charge as purchase)
-                asyncio.create_task(fb_service.track_purchase(
-                    value=value,
-                    currency=currency,
-                    email=user.email,
-                    first_name=first_name,
-                    last_name=last_name,
-                    external_id=str(user.id),
-                    client_ip=client_ip,
-                    client_user_agent=client_user_agent,
-                    fbp=fbp,
-                    fbc=fbc,
-                    event_source_url=f"{settings.FRONTEND_URL}/upgrade",
-                    event_id=event_id,
-                    content_name=f"{plan.name} (Trial)",
-                    content_ids=[str(plan.id)]
-                ))
-                
-                # TikTok Purchase (Track trial charge as purchase)
-                # Get tracking from user profile as fallback if not in context
-                if not ttp and user.signup_ttp:
-                    ttp = user.signup_ttp
-                if not ttclid and user.signup_ttclid:
-                    ttclid = user.signup_ttclid
-                if not ttp and user.last_checkout_ttp:
-                    ttp = user.last_checkout_ttp
-                if not ttclid and user.last_checkout_ttclid:
-                    ttclid = user.last_checkout_ttclid
-                    
-                asyncio.create_task(tt_service.track_purchase(
-                    value=value,
-                    currency=currency,
-                    email=user.email,
-                    first_name=first_name,
-                    last_name=last_name,
-                    external_id=str(user.id),
-                    client_ip=client_ip,
-                    client_user_agent=client_user_agent,
-                    event_source_url=f"{settings.FRONTEND_URL}/upgrade",
-                    event_id=event_id,
-                    ttp=ttp, 
-                    ttclid=ttclid
-                ))
-                
-                # GA4 Purchase (Track trial charge as purchase)
-                if ga_client_id:
-                    asyncio.create_task(ga4_service.track_purchase(
-                        client_id=ga_client_id,
-                        transaction_id=event_id,
-                        value=value,
-                        currency=currency,
-                        user_id=str(user.id),
-                        session_id=ga_session_id,
-                        client_ip=client_ip,
-                        user_agent=client_user_agent,
-                        page_location=f"{settings.FRONTEND_URL}/upgrade",
-                        items=[{
-                            "item_id": str(plan.id),
-                            "item_name": f"{plan.name} (Trial)",
-                            "price": value,
-                            "quantity": 1
-                        }]
-                    ))
-                    logger.info(f"✅ [TRIAL TRACKING] GA4 Purchase event queued for user {user.email} (client_id={ga_client_id})")
-                else:
-                    logger.warning(f"⚠️ [TRIAL TRACKING] Skipped GA4 tracking - missing client_id for user {user.email}")
-                
-                logger.info(f"✅ [TRIAL TRACKING] StartTrial/Subscribe events triggered for user {user.email}")
-                logger.info(f"   Context: IP={client_ip}, ttp={ttp}, ttclid={ttclid}, fbp={fbp}, fbc={fbc}, ga_client_id={ga_client_id}")
+            else:
+                logger.warning(f"⚠️ [TRIAL CREDITS] User profile not found for {subscription.user_id}, cannot track events (if enabled)")
+
         except Exception as e:
-            logger.error(f"❌ [TRIAL TRACKING] Failed to track trial start events: {e}", exc_info=True)
+            logger.error(f"❌ [TRIAL CREDITS] Error in tracking block (ignored): {e}", exc_info=True)
 
     async def _reset_monthly_credits(self, subscription: Subscription, skip_webhook_check: bool = False):
         """Reset user's credits to the plan's monthly amount.

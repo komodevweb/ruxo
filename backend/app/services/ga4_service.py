@@ -417,3 +417,37 @@ class GA4Service:
             page_referrer=page_referrer,
             params=params
         )
+
+    async def track_start_trial(
+        self,
+        client_id: str,
+        value: float,
+        currency: str = "USD",
+        items: Optional[List[Dict[str, Any]]] = None,
+        user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        client_ip: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        page_location: Optional[str] = None,
+        page_referrer: Optional[str] = None
+    ):
+        """Track 'start_trial' event (custom event for trials)"""
+        params = {
+            "value": value,
+            "currency": currency,
+        }
+        
+        if items:
+            params["items"] = items
+            
+        return await self.send_event(
+            event_name="start_trial",
+            client_id=client_id,
+            user_id=user_id,
+            session_id=session_id,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            page_location=page_location,
+            page_referrer=page_referrer,
+            params=params
+        )
