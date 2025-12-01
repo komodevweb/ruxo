@@ -559,9 +559,21 @@ class BillingService:
             await self._process_subscription(stripe_subscription, uuid.UUID(user_id))
             
             # Track Purchase event for Facebook Conversions API
-            # ONLY track if NOT a trial (trials are handled in _grant_trial_credits with StartTrial event)
+            # ONLY track if active (paid) and NOT a trial (trials are handled in _grant_trial_credits with StartTrial event)
+            
+            # Check if it's effectively a trial (status='trialing' OR has future trial_end)
+            # This matches logic in _process_subscription to prevent double tracking
             is_trial = stripe_subscription.status == "trialing"
-            if not is_trial:
+            if not is_trial and stripe_subscription.get("trial_end"):
+                try:
+                    if float(stripe_subscription.get("trial_end")) > time.time():
+                        is_trial = True
+                except (ValueError, TypeError):
+                    pass
+
+            # Only track purchase if subscription is ACTIVE (paid) and NOT a trial
+            # This prevents tracking on 'incomplete' or 'past_due' subscriptions
+            if stripe_subscription.status == "active" and not is_trial:
                 try:
                     from app.services.facebook_conversions import FacebookConversionsService
                     from app.services.tiktok_conversions import TikTokConversionsService
@@ -1740,6 +1752,12 @@ class BillingService:
         logger.info(f"[TRIAL CREDITS] Trial credits granted successfully for user {subscription.user_id}")
 
         # --- TRIGGER TRACKING EVENTS ---
+        # ONLY track if subscription status is valid (trialing or active)
+        # Skip tracking for 'incomplete' status (payment failed/requires action)
+        if subscription.status not in ["trialing", "active"]:
+             logger.warning(f"⚠️ [TRIAL TRACKING] Skipping tracking for subscription {subscription.id} with status '{subscription.status}' (expected 'trialing' or 'active')")
+             return
+
         try:
             from app.models.user import UserProfile
             from app.services.facebook_conversions import FacebookConversionsService
