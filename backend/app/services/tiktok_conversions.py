@@ -69,7 +69,6 @@ class TikTokConversionsService:
         return hashlib.sha256(value.lower().strip().encode('utf-8')).hexdigest()
     
     def _get_user_data(self, email: Optional[str] = None, phone: Optional[str] = None,
-                      first_name: Optional[str] = None, last_name: Optional[str] = None,
                       external_id: Optional[str] = None, ttp: Optional[str] = None,
                       ttclid: Optional[str] = None) -> Dict[str, Any]:
         """Build user object for TikTok Events API.
@@ -77,8 +76,6 @@ class TikTokConversionsService:
         Args:
             email: User email (will be hashed)
             phone: User phone (will be hashed)
-            first_name: User first name (will be hashed)
-            last_name: User last name (will be hashed)
             external_id: External user ID (not hashed)
             ttp: TikTok Pixel cookie (_ttp) - for attribution matching
             ttclid: TikTok Click ID cookie (_ttclid) - for ad click attribution
@@ -89,10 +86,6 @@ class TikTokConversionsService:
             user_data["email"] = self._hash_value(email)
         if phone:
             user_data["phone_number"] = self._hash_value(phone)
-        if first_name:
-            user_data["first_name"] = self._hash_value(first_name)
-        if last_name:
-            user_data["last_name"] = self._hash_value(last_name)
         if external_id:
             user_data["external_id"] = external_id
         # TikTok cookies for better attribution
@@ -271,8 +264,6 @@ class TikTokConversionsService:
                 # Log all user fields for verification
                 logger.info(f"📊 CompletePayment User Data Fields:")
                 logger.info(f"  - email: {'✓' if user.get('email') else '✗'}")
-                logger.info(f"  - first_name: {'✓' if user.get('first_name') else '✗'}")
-                logger.info(f"  - last_name: {'✓' if user.get('last_name') else '✗'}")
                 logger.info(f"  - external_id: {'✓' if user.get('external_id') else '✗'}")
                 logger.info(f"  - ttp: {'✓' if user.get('ttp') else '✗'} ({user.get('ttp', 'N/A')})")
                 logger.info(f"  - ttclid: {'✓' if user.get('ttclid') else '✗'} ({user.get('ttclid', 'N/A')})")
@@ -296,8 +287,6 @@ class TikTokConversionsService:
                 # Log all user fields for verification
                 logger.debug(f"📊 AddToCart User Data Fields:")
                 logger.debug(f"  - email: {'✓' if user.get('email') else '✗'}")
-                logger.debug(f"  - first_name: {'✓' if user.get('first_name') else '✗'}")
-                logger.debug(f"  - last_name: {'✓' if user.get('last_name') else '✗'}")
                 logger.debug(f"  - external_id: {'✓' if user.get('external_id') else '✗'}")
                 logger.debug(f"  - ttp: {'✓' if user.get('ttp') else '✗'}")
                 logger.debug(f"  - ttclid: {'✓' if user.get('ttclid') else '✗'}")
@@ -391,8 +380,6 @@ class TikTokConversionsService:
     async def track_complete_registration(
         self,
         email: Optional[str] = None,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
         external_id: Optional[str] = None,
         client_ip: Optional[str] = None,
         client_user_agent: Optional[str] = None,
@@ -405,17 +392,15 @@ class TikTokConversionsService:
         Track CompleteRegistration event.
         
         Sends all TikTok-recommended parameters including:
-        - User data: email, first/last name, external_id, ttp, ttclid
+        - User data: email, external_id, ttp, ttclid
         - Context: client_ip, user_agent, page URL
         - Event ID: for deduplication (if provided)
         
-        All PII (email, names) are automatically SHA-256 hashed before sending.
+        All PII (email) is automatically SHA-256 hashed before sending.
         TikTok cookies (ttp, ttclid) are passed as-is for attribution.
         """
         user = self._get_user_data(
             email=email,
-            first_name=first_name,
-            last_name=last_name,
             external_id=external_id,
             ttp=ttp,
             ttclid=ttclid,
@@ -438,8 +423,6 @@ class TikTokConversionsService:
     async def track_initiate_checkout(
         self,
         email: Optional[str] = None,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
         external_id: Optional[str] = None,
         client_ip: Optional[str] = None,
         client_user_agent: Optional[str] = None,
@@ -461,8 +444,6 @@ class TikTokConversionsService:
         """
         user = self._get_user_data(
             email=email,
-            first_name=first_name,
-            last_name=last_name,
             external_id=external_id,
             ttp=ttp,
             ttclid=ttclid,
@@ -499,8 +480,6 @@ class TikTokConversionsService:
         value: float,
         currency: str = "USD",
         email: Optional[str] = None,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
         external_id: Optional[str] = None,
         client_ip: Optional[str] = None,
         client_user_agent: Optional[str] = None,
@@ -513,18 +492,16 @@ class TikTokConversionsService:
         Track CompletePayment event (TikTok's Purchase event).
         
         Sends all TikTok-recommended parameters including:
-        - User data: email, first/last name, external_id, ttp, ttclid
+        - User data: email, external_id, ttp, ttclid
         - Context: client_ip, user_agent, page URL
         - Properties: value, currency
         - Event ID: for deduplication
         
-        All PII (email, names) are automatically SHA-256 hashed before sending.
+        All PII (email) is automatically SHA-256 hashed before sending.
         TikTok cookies (ttp, ttclid) are passed as-is for attribution.
         """
         user = self._get_user_data(
             email=email,
-            first_name=first_name,
-            last_name=last_name,
             external_id=external_id,
             ttp=ttp,
             ttclid=ttclid,
@@ -591,8 +568,6 @@ class TikTokConversionsService:
         contents: Optional[List[Dict[str, Any]]] = None,
         num_items: Optional[int] = None,
         email: Optional[str] = None,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
         external_id: Optional[str] = None,
         client_ip: Optional[str] = None,
         client_user_agent: Optional[str] = None,
@@ -605,18 +580,16 @@ class TikTokConversionsService:
         Track AddToCart event for SaaS subscription page.
         
         Sends all TikTok-recommended parameters including:
-        - User data: email, first_name, last_name, external_id, ttp, ttclid
+        - User data: email, external_id, ttp, ttclid
         - Context: client_ip, user_agent, page URL
         - Properties: currency, value, content_ids, content_name, content_type, contents, num_items
         - Event ID: for deduplication (if provided)
         
-        All PII (email, names) are automatically SHA-256 hashed before sending.
+        All PII (email) is automatically SHA-256 hashed before sending.
         TikTok cookies (ttp, ttclid) are passed as-is for attribution.
         """
         user = self._get_user_data(
             email=email,
-            first_name=first_name,
-            last_name=last_name,
             external_id=external_id,
             ttp=ttp,
             ttclid=ttclid,
@@ -652,8 +625,6 @@ class TikTokConversionsService:
         value: float,
         currency: str = "USD",
         email: Optional[str] = None,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
         external_id: Optional[str] = None,
         client_ip: Optional[str] = None,
         client_user_agent: Optional[str] = None,
@@ -666,18 +637,16 @@ class TikTokConversionsService:
         Track StartTrial event (used for trial starts).
         
         Sends all TikTok-recommended parameters including:
-        - User data: email, first/last name, external_id, ttp, ttclid
+        - User data: email, external_id, ttp, ttclid
         - Context: client_ip, user_agent, page URL
         - Properties: value, currency
         - Event ID: for deduplication
         
-        All PII (email, names) are automatically SHA-256 hashed before sending.
+        All PII (email) is automatically SHA-256 hashed before sending.
         TikTok cookies (ttp, ttclid) are passed as-is for attribution.
         """
         user = self._get_user_data(
             email=email,
-            first_name=first_name,
-            last_name=last_name,
             external_id=external_id,
             ttp=ttp,
             ttclid=ttclid,

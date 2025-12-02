@@ -117,6 +117,9 @@ async def get_current_user(
                         
                         for table in tables_to_update:
                             try:
+                                # SECURITY: Safe dynamic SQL usage
+                                # 'table' is from the hardcoded whitelist above (tables_to_update)
+                                # 'new_id' and 'old_id' are passed as bound parameters
                                 result = await session.execute(
                                     text(f"UPDATE {table} SET user_id = :new_id WHERE user_id = :old_id"),
                                     {"new_id": str(user_id), "old_id": str(old_user_id)}

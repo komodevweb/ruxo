@@ -657,8 +657,15 @@ function UpgradeContent() {
                                              buttonText = "Upgrade";
                                              buttonOnClick = (e?: React.MouseEvent) => handleSelectPlan(plan.name, e);
                                         } else if (planStatus.type === 'current') {
-                                             buttonText = "Manage Subscription";
-                                             buttonOnClick = handleManagePlan;
+                                             // For trial users, show "Current Plan" instead of "Manage Subscription"
+                                             // since there's nothing to manage in Stripe yet
+                                             if (user?.subscription_status === 'trialing') {
+                                                  buttonText = "Current Plan";
+                                                  // No onClick - button is just informational
+                                             } else {
+                                                  buttonText = "Manage Subscription";
+                                                  buttonOnClick = handleManagePlan;
+                                             }
                                         } else if (planStatus.type === 'downgrade' || planStatus.type === 'incompatible') {
                                              // Show "Not Available" for any downgrade or incompatible plan
                                              buttonText = "Not Available";

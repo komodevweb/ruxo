@@ -101,6 +101,8 @@ async def create_checkout_session(
     current_user.last_checkout_user_agent = client_user_agent
     current_user.last_checkout_fbp = fbp
     current_user.last_checkout_fbc = fbc
+    current_user.last_checkout_ttp = ttp
+    current_user.last_checkout_ttclid = ttclid
     current_user.last_checkout_ga_client_id = ga_client_id
     current_user.last_checkout_ga_session_id = ga_session_id
     current_user.last_checkout_timestamp = datetime.utcnow()
@@ -326,8 +328,6 @@ async def track_initiate_checkout(
         # TikTok tracking
         asyncio.create_task(tiktok_service.track_initiate_checkout(
             email=current_user.email if current_user else None,
-            first_name=first_name,
-            last_name=last_name,
             external_id=str(current_user.id) if current_user else None,
             client_ip=client_ip,
             client_user_agent=client_user_agent,
@@ -384,8 +384,8 @@ async def track_view_content(
         fbc = request.cookies.get("_fbc")
         
         # Get TikTok cookies if available
-        ttp = request.cookies.get("_ttp")
-        ttclid = request.cookies.get("_ttclid")
+        ttp = request.cookies.get("_ttp") or request.cookies.get("ttp")
+        ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid") or request.query_params.get("ttclid")
         
         # GA4 cookies
         ga_client_id = None
@@ -407,7 +407,7 @@ async def track_view_content(
         # Get event_source_url from query params or use referer
         event_source_url = request.query_params.get("url") or request.headers.get("referer") or f"{settings.FRONTEND_URL}/"
         
-        logger.info(f"ViewContent tracking request - URL: {event_source_url}, User: {current_user.id if current_user else 'anonymous'}")
+        logger.info(f"ViewContent tracking request - URL: {event_source_url}, User: {current_user.id if current_user else 'anonymous'}, ttp={ttp}, ttclid={ttclid}")
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
@@ -510,7 +510,7 @@ async def track_add_to_cart(
         tiktok_service = TikTokConversionsService()
         ga4_service = GA4Service()
         
-        # Extract first and last name from display_name if available (for authenticated users)
+        # Extract first and last name from display_name if available (for Facebook - they use it)
         first_name = None
         last_name = None
         if current_user and current_user.display_name:
@@ -527,7 +527,7 @@ async def track_add_to_cart(
         
         # Track event (fire and forget)
         import asyncio
-        # Facebook tracking
+        # Facebook tracking (includes first_name/last_name - Facebook uses them)
         asyncio.create_task(conversions_service.track_add_to_cart(
             currency="USD",
             value=None,  # Optional - we don't know which plan they'll select yet
@@ -548,7 +548,7 @@ async def track_add_to_cart(
             event_id=event_id,
         ))
         
-        # TikTok tracking
+        # TikTok tracking (no first_name/last_name - TikTok doesn't use them)
         asyncio.create_task(tiktok_service.track_add_to_cart(
             currency="USD",
             value=None,  # Optional - we don't know which plan they'll select yet
@@ -558,8 +558,6 @@ async def track_add_to_cart(
             contents=None,  # Optional - can be set if we have specific plan details
             num_items=1,  # User is viewing subscription plans
             email=current_user.email if current_user else None,
-            first_name=first_name,  # Include user's first name
-            last_name=last_name,  # Include user's last name
             external_id=str(current_user.id) if current_user else None,
             client_ip=client_ip,
             client_user_agent=client_user_agent,

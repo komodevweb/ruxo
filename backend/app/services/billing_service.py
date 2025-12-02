@@ -610,8 +610,11 @@ class BillingService:
                         client_user_agent = metadata.get("client_user_agent") or user.last_checkout_user_agent
                         fbp = metadata.get("fbp") or user.last_checkout_fbp
                         fbc = metadata.get("fbc") or user.last_checkout_fbc
-                        ttp = metadata.get("ttp")
-                        ttclid = metadata.get("ttclid")
+                        ttp = metadata.get("ttp") or user.last_checkout_ttp
+                        ttclid = metadata.get("ttclid") or user.last_checkout_ttclid
+                        gclid = metadata.get("gclid") or user.last_checkout_gclid
+                        gbraid = metadata.get("gbraid") or user.last_checkout_gbraid
+                        wbraid = metadata.get("wbraid") or user.last_checkout_wbraid
                         ga_client_id = metadata.get("ga_client_id") or user.last_checkout_ga_client_id
                         ga_session_id = metadata.get("ga_session_id") or user.last_checkout_ga_session_id
                         
@@ -771,18 +774,18 @@ class BillingService:
                         client_ip = metadata.get("client_ip")
                         client_user_agent = metadata.get("client_user_agent")
                         # Facebook cookies
-                        fbp = metadata.get("fbp")
-                        fbc = metadata.get("fbc")
+                        fbp = metadata.get("fbp") or user.last_checkout_fbp
+                        fbc = metadata.get("fbc") or user.last_checkout_fbc
                         # TikTok cookies
-                        ttp = metadata.get("ttp")
-                        ttclid = metadata.get("ttclid")
+                        ttp = metadata.get("ttp") or user.last_checkout_ttp
+                        ttclid = metadata.get("ttclid") or user.last_checkout_ttclid
                         # Google Ads parameters
-                        gclid = metadata.get("gclid")
-                        gbraid = metadata.get("gbraid")
-                        wbraid = metadata.get("wbraid")
+                        gclid = metadata.get("gclid") or user.last_checkout_gclid
+                        gbraid = metadata.get("gbraid") or user.last_checkout_gbraid
+                        wbraid = metadata.get("wbraid") or user.last_checkout_wbraid
                         # GA4 parameters
-                        ga_client_id = metadata.get("ga_client_id")
-                        ga_session_id = metadata.get("ga_session_id")
+                        ga_client_id = metadata.get("ga_client_id") or user.last_checkout_ga_client_id
+                        ga_session_id = metadata.get("ga_session_id") or user.last_checkout_ga_session_id
                         
                         # FALLBACK 1: Check subscription metadata if session metadata is missing
                         if not client_ip and stripe_subscription:

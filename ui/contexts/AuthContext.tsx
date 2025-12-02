@@ -276,6 +276,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setUser(data.user);
               setLoading(false);
               
+              // Identify user to TikTok Pixel for better PageView attribution
+              if (typeof window !== 'undefined' && (window as any).ttq) {
+                try {
+                  (window as any).ttq.identify({
+                    email: data.user.email,
+                    external_id: data.user.id,
+                  });
+                  console.log('[OAUTH FRONTEND] TikTok identify called for user:', data.user.email);
+                } catch (e) {
+                  console.warn('[OAUTH FRONTEND] TikTok identify failed:', e);
+                }
+              }
+              
               // If this is a new user, fire CompleteRegistration from the REAL browser
               // This ensures we get real IP, user agent, and cookies (not Google's server)
               if (data.new_user === true) {
@@ -459,6 +472,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const userData = await apiClient.get<User>('/auth/me');
       setUser(userData);
+      
+      // Identify user to TikTok Pixel for better PageView attribution
+      if (typeof window !== 'undefined' && (window as any).ttq && userData) {
+        try {
+          (window as any).ttq.identify({
+            email: userData.email,
+            external_id: userData.id,
+          });
+          console.log('[AUTH] TikTok identify called for returning user:', userData.email);
+        } catch (e) {
+          console.warn('[AUTH] TikTok identify failed:', e);
+        }
+      }
     } catch (error: any) {
       const errorMessage = error.message || '';
       const isAuthError = 
@@ -580,6 +606,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (data.user) {
           setUser(data.user);
           setLoading(false);
+          
+          // Identify user to TikTok Pixel for better PageView attribution
+          if (typeof window !== 'undefined' && (window as any).ttq) {
+            try {
+              (window as any).ttq.identify({
+                email: data.user.email,
+                external_id: data.user.id,
+              });
+              console.log('[SIGNIN] TikTok identify called for user:', data.user.email);
+            } catch (e) {
+              console.warn('[SIGNIN] TikTok identify failed:', e);
+            }
+          }
         } else {
           // Fallback to checkAuth if user not in response
           await checkAuth();
