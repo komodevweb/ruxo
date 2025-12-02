@@ -44,7 +44,7 @@ export default function SignupPage() {
             <Link href="/" className="inline-block cursor-pointer">
               <img src="images/logo-2.png" className="inline-block rounded-[22px] shadow-6xl" alt="Ruxo Logo" />
             </Link>
-            <h4 className="text-[32px] font-medium leading-[120%] tracking-[-1px] mt-6 mb-8 text-white">Create stunning AI content</h4>
+            <h4 className="text-[32px] font-medium leading-[120%] tracking-[-1px] mt-6 mb-8 text-white">Create an account</h4>
             <div className="space-y-4">
               <button
                 onClick={() => handleOAuthSignup('apple')}

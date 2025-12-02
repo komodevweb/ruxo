@@ -33,7 +33,7 @@ export default function Home() {
         <div className="max-w-[1320px] px-5 mx-auto">
           <div className="text-center">
             <span className="text-[10px] font-medium leading-2.5 text-black py-1 px-[11px] inline-block bg-blue-1000 rounded-full">AI Creation Platform</span>
-            <h1 className="md:text-[68px] text-[38px] text-white font-medium md:mt-5 mt-4 mb-4 leading-[120%] tracking-[-1px]">Ruxo - Where Imagination Turns Real</h1>
+            <h1 className="md:text-[68px] text-[38px] text-white font-medium md:mt-5 mt-4 mb-4 leading-[120%] tracking-[-1px]">Where Imagination Turns Real</h1>
             <p className="md:text-base text-sm font-medium leading-[120%] text-white/60">Turn your ideas into amazing videos, images, and visuals. Just type what you want and watch the magic happen.</p>
           </div>
           <div className="md:mt-20 mt-12">

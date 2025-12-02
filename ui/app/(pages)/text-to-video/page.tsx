@@ -1295,13 +1295,13 @@ function page() {
                                    <div className="md:hidden block mb-6 px-5" style={{ paddingBottom: 'max(1.5rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))' }}>
                                         <div className="text-center mb-6">
                                              <div className="flex gap-2 items-center justify-center mb-2">
-                                                  <span className="text-[10px] font-medium text-black inline-block py-0.5 px-[7px] bg-blue-1000 rounded-xl">NEW</span>
+                                                  <span className="text-[10px] font-medium text-black inline-block py-0.5 px-[7px] bg-blue-1000 rounded-xl">HOT</span>
                                                   <h6 className="text-sm font-normal leading-[120%] text-gradient">Text to Video</h6>
                                              </div>
-                                             <h2 className="text-[38px] font-medium text-white leading-[120%] my-4 tracking-[-1px]">Turn Text Into Video</h2>
-                                             <p className="text-sm font-medium leading-[120%] text-white/60 mb-6">Turn text into high-impact creative videos powered by the latest AI models.</p>
+                                             <h2 className="text-[38px] font-medium text-white leading-[120%] my-4 tracking-[-1px]">Words Become Cinema</h2>
+                                             <p className="text-sm font-medium leading-[120%] text-white/60 mb-6">Access Sora, Veo 3, Kling, Minimax & more. All the world's best AI video models in one place.</p>
                                              <button 
-                                                  onClick={() => setSidebarOpen(true)} 
+                                                  onClick={() => user ? setSidebarOpen(true) : router.push("/signup")} 
                                                   className="text-xs w-full text-center font-bold leading-[120%] text-black inline-block py-[11.5px] px-3.5 shadow-3xl bg1 rounded-xl hover:shadow-7xl transition-all duration-300" 
                                              >
                                                   Generate
@@ -1319,14 +1319,14 @@ function page() {
                               <>
                                    <div className="text-center mb-6 pt-4 md:pt-0">
                                         <div className="flex gap-2 items-center justify-center">
-                                             <span className="text-[10px] font-medium text-black inline-block py-0.5 px-[7px] bg-blue-1000 rounded-xl">NEW</span>
+                                             <span className="text-[10px] font-medium text-black inline-block py-0.5 px-[7px] bg-blue-1000 rounded-xl">HOT</span>
                                              <h6 className="text-sm font-normal leading-[120%] text-gradient">Text to Video</h6>
                                         </div>
-                                        <h2 className="md:text-5xl text-[38px] font-medium text-white leading-[120%] my-4 tracking-[-1px]">Turn Text Into Video</h2>
-                                        <p className="md:text-base text-sm font-medium leading-[120%] text-white/60">Turn text into high-impact creative videos powered by the latest AI models.</p>
+                                        <h2 className="md:text-5xl text-[38px] font-medium text-white leading-[120%] my-4 tracking-[-1px]">Words Become Cinema</h2>
+                                        <p className="md:text-base text-sm font-medium leading-[120%] text-white/60">Access Sora, Veo 3, Kling, Minimax & more. All the world's best AI video models in one place.</p>
                                         <div className="md:hidden block mt-12" style={{ paddingBottom: 'max(1.5rem, calc(1.5rem + env(safe-area-inset-bottom, 0px)))' }}>
                                              <button 
-                                                  onClick={() => setSidebarOpen(true)} 
+                                                  onClick={() => user ? setSidebarOpen(true) : router.push("/signup")} 
                                                   className="md:text-sm text-xs w-full text-center font-bold leading-[120%] text-black inline-block py-[11.5px] px-3.5 shadow-3xl bg1 rounded-xl hover:shadow-7xl transition-all duration-300" 
                                              >
                                                   Generate
