@@ -5,6 +5,9 @@ Handles file uploads to Backblaze and job submission to WaveSpeed.
 import logging
 import uuid
 import asyncio
+import tempfile
+import subprocess
+import os
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status, Request
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
@@ -39,6 +42,29 @@ class WanAnimateResponse(BaseModel):
     status: str
     task_id: str
     message: str
+
+
+def get_video_duration(file_path: str) -> float:
+    """Get video duration in seconds using ffprobe."""
+    try:
+        cmd = [
+            'ffprobe', 
+            '-v', 'error', 
+            '-show_entries', 'format=duration', 
+            '-of', 'default=noprint_wrappers=1:nokey=1', 
+            file_path
+        ]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            logger.error(f"ffprobe failed: {result.stderr}")
+            return 0.0
+        output = result.stdout.strip()
+        if not output:
+            return 0.0
+        return float(output)
+    except Exception as e:
+        logger.error(f"Error getting video duration: {e}")
+        return 0.0
 
 
 @router.get("/calculate-credits")
@@ -160,7 +186,40 @@ async def submit_wan_animate(
         # Handle video: upload or use provided URL
         if video:
             logger.info(f"Uploading video file: {video.filename}, content_type: {video.content_type}")
-            video_data = await video.read()
+            
+            # Verify video duration
+            try:
+                content = await video.read()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_video:
+                    temp_video.write(content)
+                    temp_video_path = temp_video.name
+                
+                duration = get_video_duration(temp_video_path)
+                # Clean up temp file
+                if os.path.exists(temp_video_path):
+                    os.unlink(temp_video_path)
+                
+                logger.info(f"Video duration check: {duration}s")
+                
+                if duration > 30.5:  # Allow 0.5s margin
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Video duration ({duration:.2f}s) exceeds the 30-second limit."
+                    )
+                
+                # Use the content we already read for upload
+                video_data = content
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error checking video duration: {e}")
+                # If we can't check duration, we proceed but log error? 
+                # Or assume it's invalid? Let's proceed if check fails but log it, 
+                # unless we want to be strict. Since we want "smartest", let's be strict if ffmpeg worked but returned > 30.
+                # If get_video_duration returns 0 (error), we skip check.
+                video_data = await video.read() # In case exception happened before read completed
+                
             # Run upload in thread executor to avoid blocking event loop
             video_b2_url = await asyncio.to_thread(
                 storage_service.upload_file,
@@ -585,4 +644,3 @@ async def list_wan_animate_jobs(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list jobs: {str(e)}"
         )
-

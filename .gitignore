@@ -7,9 +7,9 @@ ui/.env
 
 # Logs
 logs/
-*.log
+*.logs
 
 logs/facebook_conversions_api.log
 logs/ga4_tracking.log 
-logs/ga4_tracking.log 
+logs/tiktok_conversions_api.log 
 

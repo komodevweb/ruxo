@@ -83,6 +83,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let fbcCookie: string | null = null;
         let ttpCookie: string | null = null;
         let ttclidCookie: string | null = null;
+        let gclidCookie: string | null = null;
+        let gbraidCookie: string | null = null;
+        let wbraidCookie: string | null = null;
+        let gaClientId: string | null = null;
+        let gaSessionId: string | null = null;
         
         try {
           const cookies = document.cookie.split(';');
@@ -98,8 +103,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               ttclidCookie = cookie.substring(8);
             } else if (cookie.startsWith('ttclid=')) {
               ttclidCookie = cookie.substring(7);
+            } else if (cookie.startsWith('gclid=') || cookie.startsWith('_gcl_aw=')) {
+              gclidCookie = cookie.split('=')[1];
+            } else if (cookie.startsWith('gbraid=')) {
+              gbraidCookie = cookie.substring(7);
+            } else if (cookie.startsWith('wbraid=')) {
+              wbraidCookie = cookie.substring(7);
+            } else if (cookie.startsWith('_ga=')) {
+              // Extract GA Client ID: GA1.1.123456789.123456789 -> 123456789.123456789
+              const parts = cookie.substring(4).split('.');
+              if (parts.length >= 2) {
+                gaClientId = parts.slice(-2).join('.');
+              }
+            } else if (cookie.startsWith('_ga_')) {
+              // Extract GA Session ID: GS1.1.123456789.1.1.123456789.0.0.0 -> 123456789 (3rd part)
+              const parts = cookie.split('=')[1].split('.');
+              if (parts.length > 2) {
+                gaSessionId = parts[2];
+              }
             }
           }
+          
+          // Also check URL params for gclid/gbraid/wbraid if not in cookies
+          const params = new URLSearchParams(window.location.search);
+          if (!gclidCookie) gclidCookie = params.get('gclid');
+          if (!gbraidCookie) gbraidCookie = params.get('gbraid');
+          if (!wbraidCookie) wbraidCookie = params.get('wbraid');
+          
         } catch (e) {
           console.warn('[OAUTH FRONTEND] Could not read cookies:', e);
         }
@@ -119,6 +149,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             fbc: fbcCookie,
             ttp: ttpCookie,
             ttclid: ttclidCookie,
+            gclid: gclidCookie,
+            gbraid: gbraidCookie,
+            wbraid: wbraidCookie,
+            ga_client_id: gaClientId,
+            ga_session_id: gaSessionId,
             user_agent: userAgentValue,
           }),
         })
@@ -163,6 +198,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Retrieve stored tracking data (captured on signup/login page before OAuth redirect)
           let fbp: string | null = null;
           let fbc: string | null = null;
+          let ttp: string | null = null;
+          let ttclid: string | null = null;
+          let gclid: string | null = null;
+          let gbraid: string | null = null;
+          let wbraid: string | null = null;
+          let gaClientId: string | null = null;
+          let gaSessionId: string | null = null;
           let userAgent: string | null = null;
           
           try {
@@ -172,11 +214,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const storedData = JSON.parse(stored);
               fbp = storedData.fbp || null;
               fbc = storedData.fbc || null;
+              ttp = storedData.ttp || null;
+              ttclid = storedData.ttclid || null;
+              gclid = storedData.gclid || null;
+              gbraid = storedData.gbraid || null;
+              wbraid = storedData.wbraid || null;
+              gaClientId = storedData.gaClientId || null;
+              gaSessionId = storedData.gaSessionId || null;
               userAgent = storedData.userAgent || null;
               
               console.log('[OAUTH FRONTEND] ✅ Retrieved tracking data from sessionStorage:', {
                 hasFbp: !!fbp,
                 hasFbc: !!fbc,
+                hasTtp: !!ttp,
+                hasTtclid: !!ttclid,
+                hasGa: !!gaClientId,
                 hasUserAgent: !!userAgent,
               });
               
@@ -193,22 +245,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   fbp = cookie.substring(5);
                 } else if (cookie.startsWith('_fbc=')) {
                   fbc = cookie.substring(5);
+                } else if (cookie.startsWith('_ttp=')) {
+                  ttp = cookie.substring(5);
+                } else if (cookie.startsWith('_ttclid=')) {
+                  ttclid = cookie.substring(8);
+                } else if (cookie.startsWith('ttclid=')) {
+                  ttclid = cookie.substring(7);
+                } else if (cookie.startsWith('gclid=') || cookie.startsWith('_gcl_aw=')) {
+                  gclid = cookie.split('=')[1];
+                } else if (cookie.startsWith('gbraid=')) {
+                  gbraid = cookie.substring(7);
+                } else if (cookie.startsWith('wbraid=')) {
+                  wbraid = cookie.substring(7);
+                } else if (cookie.startsWith('_ga=')) {
+                  const parts = cookie.substring(4).split('.');
+                  if (parts.length >= 2) {
+                    gaClientId = parts.slice(-2).join('.');
+                  }
+                } else if (cookie.startsWith('_ga_')) {
+                  const parts = cookie.split('=')[1].split('.');
+                  if (parts.length > 2) {
+                    gaSessionId = parts[2];
+                  }
                 }
               }
+              
+              const params = new URLSearchParams(window.location.search);
+              if (!gclid) gclid = params.get('gclid');
+              if (!gbraid) gbraid = params.get('gbraid');
+              if (!wbraid) wbraid = params.get('wbraid');
+              
               userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null;
             }
           } catch (error) {
             console.error('[OAUTH FRONTEND] ❌ Error retrieving tracking data:', error);
-            // Fallback to current cookies
-            const cookies = document.cookie.split(';');
-            for (let cookie of cookies) {
-              cookie = cookie.trim();
-              if (cookie.startsWith('_fbp=')) {
-                fbp = cookie.substring(5);
-              } else if (cookie.startsWith('_fbc=')) {
-                fbc = cookie.substring(5);
-              }
-            }
             userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null;
           }
           
@@ -216,6 +286,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.log('[OAUTH FRONTEND] Final tracking data to send:', {
             hasFbp: !!fbp,
             hasFbc: !!fbc,
+            hasTtp: !!ttp,
+            hasGa: !!gaClientId,
             hasUserAgent: !!userAgent,
           });
           console.log('[OAUTH FRONTEND] Calling backend exchange endpoint...');
@@ -294,50 +366,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (data.new_user === true) {
                 console.log('[OAUTH FRONTEND] 🆕 New user detected - firing CompleteRegistration from real browser...');
                 
-                // IMPORTANT: Read tracking cookies from document.cookie
-                // These are first-party cookies set on the FRONTEND domain (e.g., ruxo.ai)
-                // They WON'T be sent automatically via credentials:include because the
-                // backend API is on a different domain (e.g., api.ruxo.ai)
-                // We must read them here and send in the request body
-                let fbpCookie: string | null = null;
-                let fbcCookie: string | null = null;
-                let ttpCookie: string | null = null;
-                let ttclidCookie: string | null = null;
+                // IMPORTANT: Use the tracking variables we retrieved/extracted earlier
+                // (fbp, fbc, ttp, ttclid, gclid, gbraid, wbraid, gaClientId, gaSessionId)
                 
-                try {
-                  const cookies = document.cookie.split(';');
-                  for (let cookie of cookies) {
-                    cookie = cookie.trim();
-                    if (cookie.startsWith('_fbp=')) {
-                      fbpCookie = cookie.substring(5);
-                      console.log('[OAUTH FRONTEND] Found _fbp cookie:', fbpCookie.substring(0, 30) + '...');
-                    } else if (cookie.startsWith('_fbc=')) {
-                      fbcCookie = cookie.substring(5);
-                      console.log('[OAUTH FRONTEND] Found _fbc cookie:', fbcCookie.substring(0, 30) + '...');
-                    } else if (cookie.startsWith('_ttp=')) {
-                      ttpCookie = cookie.substring(5);
-                      console.log('[OAUTH FRONTEND] Found _ttp cookie:', ttpCookie.substring(0, 30) + '...');
-                    } else if (cookie.startsWith('_ttclid=')) {
-                      ttclidCookie = cookie.substring(8);
-                      console.log('[OAUTH FRONTEND] Found _ttclid cookie:', ttclidCookie.substring(0, 30) + '...');
-                    } else if (cookie.startsWith('ttclid=')) {
-                      ttclidCookie = cookie.substring(7);
-                      console.log('[OAUTH FRONTEND] Found ttclid cookie:', ttclidCookie.substring(0, 30) + '...');
-                    }
-                  }
-                } catch (e) {
-                  console.warn('[OAUTH FRONTEND] Could not read cookies:', e);
+                // If we didn't get them from sessionStorage, try reading cookies one last time
+                // (redundant but safe if sessionStorage failed)
+                if (!fbp) {
+                   try {
+                      const cookies = document.cookie.split(';');
+                      for (let cookie of cookies) {
+                        cookie = cookie.trim();
+                        if (cookie.startsWith('_fbp=')) fbp = cookie.substring(5);
+                        else if (cookie.startsWith('_fbc=')) fbc = cookie.substring(5);
+                        else if (cookie.startsWith('_ttp=')) ttp = cookie.substring(5);
+                        else if (cookie.startsWith('_ttclid=')) ttclid = cookie.substring(8);
+                        else if (cookie.startsWith('ttclid=')) ttclid = cookie.substring(7);
+                      }
+                   } catch(e) {}
                 }
                 
-                // Get user agent
-                const userAgentValue = typeof navigator !== 'undefined' ? navigator.userAgent : null;
-                
                 console.log('[OAUTH FRONTEND] Tracking data to send:', {
-                  hasFbp: !!fbpCookie,
-                  hasFbc: !!fbcCookie,
-                  hasTtp: !!ttpCookie,
-                  hasTtclid: !!ttclidCookie,
-                  hasUserAgent: !!userAgentValue,
+                  hasFbp: !!fbp,
+                  hasFbc: !!fbc,
+                  hasTtp: !!ttp,
+                  hasTtclid: !!ttclid,
+                  hasGa: !!gaClientId,
+                  hasUserAgent: !!userAgent,
                 });
                 
                 // Call the complete-registration endpoint from the REAL browser
@@ -350,11 +404,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   },
                   credentials: 'include',
                   body: JSON.stringify({
-                    fbp: fbpCookie,
-                    fbc: fbcCookie,
-                    ttp: ttpCookie,
-                    ttclid: ttclidCookie,
-                    user_agent: userAgentValue,
+                    fbp: fbp,
+                    fbc: fbc,
+                    ttp: ttp,
+                    ttclid: ttclid,
+                    gclid: gclid,
+                    gbraid: gbraid,
+                    wbraid: wbraid,
+                    ga_client_id: gaClientId,
+                    ga_session_id: gaSessionId,
+                    user_agent: userAgent,
                   }),
                 })
                 .then(response => {
@@ -649,6 +708,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const cookies = document.cookie.split(';');
         let fbp: string | null = null;
         let fbc: string | null = null;
+        let ttp: string | null = null;
+        let ttclid: string | null = null;
+        let gclid: string | null = null;
+        let gbraid: string | null = null;
+        let wbraid: string | null = null;
+        let gaClientId: string | null = null;
+        let gaSessionId: string | null = null;
         
         for (let cookie of cookies) {
           cookie = cookie.trim();
@@ -656,8 +722,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             fbp = cookie.substring(5);
           } else if (cookie.startsWith('_fbc=')) {
             fbc = cookie.substring(5);
+          } else if (cookie.startsWith('_ttp=')) {
+            ttp = cookie.substring(5);
+          } else if (cookie.startsWith('_ttclid=')) {
+            ttclid = cookie.substring(8);
+          } else if (cookie.startsWith('ttclid=')) {
+            ttclid = cookie.substring(7);
+          } else if (cookie.startsWith('gclid=') || cookie.startsWith('_gcl_aw=')) {
+            gclid = cookie.split('=')[1];
+          } else if (cookie.startsWith('gbraid=')) {
+            gbraid = cookie.substring(7);
+          } else if (cookie.startsWith('wbraid=')) {
+            wbraid = cookie.substring(7);
+          } else if (cookie.startsWith('_ga=')) {
+            // Extract GA Client ID: GA1.1.123456789.123456789 -> 123456789.123456789
+            const parts = cookie.substring(4).split('.');
+            if (parts.length >= 2) {
+              gaClientId = parts.slice(-2).join('.');
+            }
+          } else if (cookie.startsWith('_ga_')) {
+            // Extract GA Session ID: GS1.1.123456789.1.1.123456789.0.0.0 -> 123456789 (3rd part)
+            const parts = cookie.split('=')[1].split('.');
+            if (parts.length > 2) {
+              gaSessionId = parts[2];
+            }
           }
         }
+        
+        // Also check URL params for gclid/gbraid/wbraid
+        const params = new URLSearchParams(window.location.search);
+        if (!gclid) gclid = params.get('gclid');
+        if (!gbraid) gbraid = params.get('gbraid');
+        if (!wbraid) wbraid = params.get('wbraid');
         
         // Capture user agent (synchronous)
         const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null;
@@ -667,6 +763,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const trackingData = {
           fbp,
           fbc,
+          ttp,
+          ttclid,
+          gclid,
+          gbraid,
+          wbraid,
+          gaClientId,
+          gaSessionId,
           userAgent,
           referrer,
         };
@@ -676,6 +779,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[OAUTH] ✅ Captured tracking data on signup/login page:', {
           hasFbp: !!fbp,
           hasFbc: !!fbc,
+          hasTtp: !!ttp,
+          hasTtclid: !!ttclid,
+          hasGa: !!gaClientId,
           hasUserAgent: !!userAgent,
           page: window.location.pathname,
         });

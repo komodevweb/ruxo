@@ -1,0 +1,5 @@
+Dec 02 21:26:23 ruxo ruxo-backend[1825143]: 2025-12-02 21:26:23,469 - app.routers.auth - INFO - 📊 [OAUTH COMPLETE-REGISTRATION] Received tracking_data: ttp=✓, ttclid=✗, fbp=✓, gclid=✗
+Dec 02 21:26:23 ruxo ruxo-backend[1825143]: 2025-12-02 21:26:23,470 - app.routers.auth - INFO - 🎯 [OAUTH COMPLETE-REGISTRATION] Firing CompleteRegistration for NEW OAuth user: runexo.ai@gmail.com
+Dec 02 21:26:23 ruxo ruxo-backend[1825143]: 2025-12-02 21:26:23,470 - app.routers.auth - INFO - 📊 [OAUTH COMPLETE-REGISTRATION] Real browser data: IP=62.197.147.68, UA=True, fbp=True, fbc=False, ga_client_id=True
+Dec 02 21:26:23 ruxo ruxo-backend[1825143]: 2025-12-02 21:26:23,470 - app.routers.auth - INFO - 📊 [OAUTH COMPLETE-REGISTRATION] fbp value: fb.1.1763921999100.41071232690...
+Dec 02 21:26:23 ruxo ruxo-backend[1825143]: 2025-12-02 21:26:23,689 - app.routers.auth - ERROR - ❌ [OAUTH COMPLETE-REGISTRATION] Failed to fire CompleteRegistration: TikTokConversionsService.track_complete_registration() got an unexpected keyword argument 'first_name'

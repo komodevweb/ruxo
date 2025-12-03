@@ -252,8 +252,6 @@ async def signup(
                 # TikTok tracking (ttp, ttclid already extracted from request body above)
                 asyncio.create_task(tiktok_service.track_complete_registration(
                     email=user_profile.email,
-                    first_name=first_name,
-                    last_name=last_name,
                     external_id=str(user_profile.id),
                     client_ip=client_ip,
                     client_user_agent=client_user_agent,
@@ -417,8 +415,6 @@ async def signup(
                 
             asyncio.create_task(tiktok_service.track_complete_registration(
                 email=user_profile.email,
-                first_name=first_name,
-                last_name=last_name,
                 external_id=str(user_profile.id),
                 client_ip=client_ip,
                 client_user_agent=client_user_agent,
@@ -1457,8 +1453,6 @@ async def oauth_complete_registration(
         # TikTok tracking (using the variables defined above)
         asyncio.create_task(tiktok_service.track_complete_registration(
             email=current_user.email,
-            first_name=first_name,
-            last_name=last_name,
             external_id=str(current_user.id),
             client_ip=client_ip,
             client_user_agent=client_user_agent,

@@ -663,8 +663,8 @@ function UpgradeContent() {
                                                   buttonText = "Current Plan";
                                                   // No onClick - button is just informational
                                              } else {
-                                                  buttonText = "Manage Subscription";
-                                                  buttonOnClick = handleManagePlan;
+                                             buttonText = "Manage Subscription";
+                                             buttonOnClick = handleManagePlan;
                                              }
                                         } else if (planStatus.type === 'downgrade' || planStatus.type === 'incompatible') {
                                              // Show "Not Available" for any downgrade or incompatible plan

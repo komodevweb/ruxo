@@ -494,6 +494,73 @@ function page() {
                return;
           }
 
+          // Clear error initially
+          setError(null);
+
+          // Check video duration - max 30 seconds
+          const checkVideoDuration = (): Promise<number> => {
+               return new Promise((resolve, reject) => {
+                    // Create video element
+                    const video = document.createElement('video');
+                    video.preload = 'metadata';
+                    
+                    // Create object URL
+                    const objectUrl = URL.createObjectURL(file);
+                    
+                    // Set up timeout to avoid hanging
+                    const timeoutId = setTimeout(() => {
+                         window.URL.revokeObjectURL(objectUrl);
+                         // Clean up video element to be safe
+                         video.removeAttribute('src');
+                         video.load();
+                         reject(new Error('Timeout checking video duration'));
+                    }, 3000); // 3 second timeout
+                    
+                    video.onloadedmetadata = () => {
+                         clearTimeout(timeoutId);
+                         const duration = video.duration;
+                         window.URL.revokeObjectURL(objectUrl);
+                         // Clean up
+                         video.removeAttribute('src');
+                         video.load();
+                         
+                         if (isNaN(duration) || !isFinite(duration)) {
+                              reject(new Error('Invalid video duration'));
+                         } else {
+                              resolve(duration);
+                         }
+                    };
+                    
+                    video.onerror = () => {
+                         clearTimeout(timeoutId);
+                         window.URL.revokeObjectURL(objectUrl);
+                         video.removeAttribute('src');
+                         video.load();
+                         reject(new Error('Failed to load video metadata'));
+                    };
+                    
+                    video.src = objectUrl;
+               });
+          };
+
+          try {
+               const duration = await checkVideoDuration();
+               console.log(`Video duration: ${duration} seconds`);
+               
+               if (duration > 30) {
+                    setError(`Video is too long (${Math.round(duration)} seconds). Please upload a video that is 30 seconds or shorter.`);
+                    // Clear the file input so user knows it was rejected
+                    if (videoInputRef.current) videoInputRef.current.value = '';
+                    return;
+               }
+          } catch (err) {
+               console.error('Error checking video duration:', err);
+               setError("Could not verify video duration. Please try a different video file (MP4/WebM) under 30 seconds.");
+               // Clear the file input
+               if (videoInputRef.current) videoInputRef.current.value = '';
+               return; // STOP execution here to prevent bypass
+          }
+
           // Clear old video data IMMEDIATELY before setting new one
           // This ensures the old Backblaze URL is not used
           const oldUrl = videoUrlRef.current;
