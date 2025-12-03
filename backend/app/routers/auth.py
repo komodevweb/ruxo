@@ -56,6 +56,10 @@ class SignUpRequest(BaseModel):
     # GA4
     ga_client_id: Optional[str] = None
     ga_session_id: Optional[str] = None
+    
+    # Snap cookies
+    sc_cookie1: Optional[str] = None
+    sc_clid: Optional[str] = None
 
 class SignInRequest(BaseModel):
     email: EmailStr
@@ -132,6 +136,10 @@ async def signup(
             gbraid = signup_request.gbraid
             wbraid = signup_request.wbraid
             
+            # Snap cookies
+            sc_cookie1 = signup_request.sc_cookie1
+            sc_clid = signup_request.sc_clid
+            
             # Fallback to cookies if not in body
             if http_request:
                 if not fbp:
@@ -148,6 +156,11 @@ async def signup(
                     gbraid = http_request.cookies.get("gbraid") or http_request.query_params.get("gbraid")
                 if not wbraid:
                     wbraid = http_request.cookies.get("wbraid") or http_request.query_params.get("wbraid")
+                # Snap fallback
+                if not sc_cookie1:
+                    sc_cookie1 = http_request.cookies.get("_scid")
+                if not sc_clid:
+                    sc_clid = http_request.cookies.get("sc_clid")
             
             # GA4
             ga_client_id = signup_request.ga_client_id
@@ -188,6 +201,8 @@ async def signup(
                     signup_wbraid=wbraid,
                     signup_ga_client_id=ga_client_id,
                     signup_ga_session_id=ga_session_id,
+                    signup_sc_cookie1=sc_cookie1,
+                    signup_sc_clid=sc_clid,
                 )
                 session.add(user_profile)
                 await session.commit()
@@ -205,6 +220,8 @@ async def signup(
                 user_profile.signup_wbraid = wbraid
                 user_profile.signup_ga_client_id = ga_client_id
                 user_profile.signup_ga_session_id = ga_session_id
+                user_profile.signup_sc_cookie1 = sc_cookie1
+                user_profile.signup_sc_clid = sc_clid
                 session.add(user_profile)
                 await session.commit()
             
@@ -212,10 +229,12 @@ async def signup(
             try:
                 from app.services.facebook_conversions import FacebookConversionsService
                 from app.services.tiktok_conversions import TikTokConversionsService
+                from app.services.snap_conversions import SnapConversionsService
                 from app.services.ga4_service import GA4Service
                 
                 conversions_service = FacebookConversionsService()
                 tiktok_service = TikTokConversionsService()
+                snap_service = SnapConversionsService()
                 ga4_service = GA4Service()
                 
                 # Extract first and last name from display_name if available
@@ -259,6 +278,18 @@ async def signup(
                     event_id=event_id,
                     ttp=ttp,
                     ttclid=ttclid,
+                ))
+                
+                # Snap tracking
+                asyncio.create_task(snap_service.track_complete_registration(
+                    email=user_profile.email,
+                    client_ip=client_ip,
+                    client_user_agent=client_user_agent,
+                    page_url=f"{settings.FRONTEND_URL}/signup-password",
+                    sc_cookie1=sc_cookie1,
+                    sc_clid=sc_clid,
+                    event_id=event_id,
+                    external_id=str(user_profile.id),
                 ))
                 
                 # GA4 tracking
@@ -1220,6 +1251,10 @@ class CompleteRegistrationRequest(BaseModel):
     ttp: Optional[str] = None
     ttclid: Optional[str] = None
     
+    # Snap cookies
+    sc_cookie1: Optional[str] = None
+    sc_clid: Optional[str] = None
+    
     # Google Ads
     gclid: Optional[str] = None
     gbraid: Optional[str] = None
@@ -1253,6 +1288,7 @@ async def oauth_complete_registration(
     try:
         from app.services.facebook_conversions import FacebookConversionsService
         from app.services.tiktok_conversions import TikTokConversionsService
+        from app.services.snap_conversions import SnapConversionsService
         from app.services.ga4_service import GA4Service
         import asyncio
         import time
@@ -1305,6 +1341,7 @@ async def oauth_complete_registration(
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
+        snap_service = SnapConversionsService()
         ga4_service = GA4Service()
         
         # Extract first and last name from display_name
@@ -1398,6 +1435,8 @@ async def oauth_complete_registration(
             gclid = None
             gbraid = None
             wbraid = None
+            sc_cookie1 = None
+            sc_clid = None
             
             if http_request:
                 ttp = http_request.cookies.get("_ttp")
@@ -1405,6 +1444,8 @@ async def oauth_complete_registration(
                 gclid = http_request.cookies.get("gclid") or http_request.cookies.get("_gcl_aw") or http_request.query_params.get("gclid")
                 gbraid = http_request.cookies.get("gbraid") or http_request.query_params.get("gbraid")
                 wbraid = http_request.cookies.get("wbraid") or http_request.query_params.get("wbraid")
+                sc_cookie1 = http_request.cookies.get("_scid")
+                sc_clid = http_request.cookies.get("sc_clid")
                 
             if tracking_data:
                 if hasattr(tracking_data, 'ttp') and tracking_data.ttp:
@@ -1417,12 +1458,18 @@ async def oauth_complete_registration(
                     gbraid = tracking_data.gbraid
                 if hasattr(tracking_data, 'wbraid') and tracking_data.wbraid:
                     wbraid = tracking_data.wbraid
+                if hasattr(tracking_data, 'sc_cookie1') and tracking_data.sc_cookie1:
+                    sc_cookie1 = tracking_data.sc_cookie1
+                if hasattr(tracking_data, 'sc_clid') and tracking_data.sc_clid:
+                    sc_clid = tracking_data.sc_clid
             
             current_user.signup_ttp = ttp
             current_user.signup_ttclid = ttclid
             current_user.signup_gclid = gclid
             current_user.signup_gbraid = gbraid
             current_user.signup_wbraid = wbraid
+            current_user.signup_sc_cookie1 = sc_cookie1
+            current_user.signup_sc_clid = sc_clid
             
             if tracking_data and tracking_data.ga_client_id:
                 current_user.signup_ga_client_id = tracking_data.ga_client_id
@@ -1462,7 +1509,19 @@ async def oauth_complete_registration(
             ttclid=ttclid,
         ))
         
-                # GA4 tracking
+        # Snap tracking
+        asyncio.create_task(snap_service.track_complete_registration(
+            email=current_user.email,
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            page_url=f"{settings.FRONTEND_URL}/",
+            sc_cookie1=sc_cookie1,
+            sc_clid=sc_clid,
+            event_id=event_id,
+            external_id=str(current_user.id),
+        ))
+        
+        # GA4 tracking
         if ga_client_id:
             asyncio.create_task(ga4_service.track_sign_up(
                 client_id=ga_client_id,

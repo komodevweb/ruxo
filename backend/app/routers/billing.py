@@ -66,6 +66,10 @@ async def create_checkout_session(
     gbraid = request.query_params.get("gbraid") or request.cookies.get("gbraid")
     wbraid = request.query_params.get("wbraid") or request.cookies.get("wbraid")
     
+    # Snap cookies
+    sc_cookie1 = request.cookies.get("_scid")
+    sc_clid = request.cookies.get("sc_clid")
+    
     # GA4 cookies
     ga_client_id = None
     ga_session_id = None
@@ -105,6 +109,8 @@ async def create_checkout_session(
     current_user.last_checkout_ttclid = ttclid
     current_user.last_checkout_ga_client_id = ga_client_id
     current_user.last_checkout_ga_session_id = ga_session_id
+    current_user.last_checkout_sc_cookie1 = sc_cookie1
+    current_user.last_checkout_sc_clid = sc_clid
     current_user.last_checkout_timestamp = datetime.utcnow()
     session.add(current_user)
     await session.commit()
@@ -125,6 +131,8 @@ async def create_checkout_session(
         wbraid=wbraid,
         ga_client_id=ga_client_id,
         ga_session_id=ga_session_id,
+        sc_cookie1=sc_cookie1,
+        sc_clid=sc_clid,
     )
     return CheckoutSessionResponse(url=url)
 
@@ -255,6 +263,7 @@ async def track_initiate_checkout(
     try:
         from app.services.facebook_conversions import FacebookConversionsService
         from app.services.tiktok_conversions import TikTokConversionsService
+        from app.services.snap_conversions import SnapConversionsService
         from app.services.ga4_service import GA4Service
         
         # Get client IP and user agent
@@ -268,6 +277,12 @@ async def track_initiate_checkout(
         # Get TikTok cookies if available
         ttp = request.cookies.get("_ttp")
         ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
+
+        # Get Snap cookies if available
+        # Note: Snap Pixel usually sets _scid, but sometimes under different names.
+        # Standard Snap Pixel 2.0 uses _scid
+        sc_cookie1 = request.cookies.get("_scid")
+        sc_clid = request.cookies.get("sc_clid") # Click ID if passed (less common in cookies, usually query param)
         
         # GA4 cookies
         ga_client_id = None
@@ -289,6 +304,7 @@ async def track_initiate_checkout(
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
+        snap_service = SnapConversionsService()
         ga4_service = GA4Service()
         
         # Extract first and last name from display_name if available (for authenticated users)
@@ -341,6 +357,21 @@ async def track_initiate_checkout(
             content_type=content_type,
             num_items=1 if value else None,
         ))
+
+        # Snap tracking
+        asyncio.create_task(snap_service.track_initiate_checkout(
+            email=current_user.email if current_user else None,
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            page_url=f"{settings.FRONTEND_URL}/upgrade",
+            sc_cookie1=sc_cookie1,
+            sc_clid=sc_clid,
+            price=value,
+            currency=currency,
+            item_ids=content_ids,
+            number_items=1 if value else None,
+            external_id=str(current_user.id) if current_user else None,
+        ))
         
         # GA4 tracking
         if ga_client_id:
@@ -373,6 +404,7 @@ async def track_view_content(
     try:
         from app.services.facebook_conversions import FacebookConversionsService
         from app.services.tiktok_conversions import TikTokConversionsService
+        from app.services.snap_conversions import SnapConversionsService
         from app.services.ga4_service import GA4Service
         
         # Get client IP and user agent
@@ -386,6 +418,10 @@ async def track_view_content(
         # Get TikTok cookies if available
         ttp = request.cookies.get("_ttp") or request.cookies.get("ttp")
         ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid") or request.query_params.get("ttclid")
+
+        # Get Snap cookies if available
+        sc_cookie1 = request.cookies.get("_scid")
+        sc_clid = request.cookies.get("sc_clid")
         
         # GA4 cookies
         ga_client_id = None
@@ -411,6 +447,7 @@ async def track_view_content(
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
+        snap_service = SnapConversionsService()
         ga4_service = GA4Service()
         
         # Track event (fire and forget)
@@ -435,6 +472,17 @@ async def track_view_content(
             event_source_url=event_source_url,
             ttp=ttp,
             ttclid=ttclid,
+        ))
+
+        # Snap tracking
+        asyncio.create_task(snap_service.track_view_content(
+            email=current_user.email if current_user else None,
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            page_url=event_source_url,
+            sc_cookie1=sc_cookie1,
+            sc_clid=sc_clid,
+            external_id=str(current_user.id) if current_user else None,
         ))
         
         # GA4 tracking
@@ -470,6 +518,7 @@ async def track_add_to_cart(
     try:
         from app.services.facebook_conversions import FacebookConversionsService
         from app.services.tiktok_conversions import TikTokConversionsService
+        from app.services.snap_conversions import SnapConversionsService
         from app.services.ga4_service import GA4Service
         
         # Get client IP and user agent
@@ -483,6 +532,10 @@ async def track_add_to_cart(
         # Get TikTok cookies if available
         ttp = request.cookies.get("_ttp")
         ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
+
+        # Get Snap cookies if available
+        sc_cookie1 = request.cookies.get("_scid")
+        sc_clid = request.cookies.get("sc_clid")
         
         # GA4 cookies
         ga_client_id = None
@@ -508,6 +561,7 @@ async def track_add_to_cart(
         
         conversions_service = FacebookConversionsService()
         tiktok_service = TikTokConversionsService()
+        snap_service = SnapConversionsService()
         ga4_service = GA4Service()
         
         # Extract first and last name from display_name if available (for Facebook - they use it)
@@ -565,6 +619,22 @@ async def track_add_to_cart(
             event_id=event_id,
             ttp=ttp,  # TikTok cookie for attribution
             ttclid=ttclid,  # TikTok click ID for ad attribution
+        ))
+
+        # Snap tracking
+        asyncio.create_task(snap_service.track_add_to_cart(
+            email=current_user.email if current_user else None,
+            client_ip=client_ip,
+            client_user_agent=client_user_agent,
+            page_url=event_source_url,
+            sc_cookie1=sc_cookie1,
+            sc_clid=sc_clid,
+            price=None,
+            currency="USD",
+            item_ids=["ruxo_subscription"],
+            number_items=1,
+            event_id=event_id,
+            external_id=str(current_user.id) if current_user else None,
         ))
         
         # GA4 tracking
@@ -834,6 +904,10 @@ async def skip_trial_and_subscribe(
         ttp = request.cookies.get("_ttp")
         ttclid = request.cookies.get("_ttclid") or request.cookies.get("ttclid")
         
+        # Snap cookies
+        sc_cookie1 = request.cookies.get("_scid")
+        sc_clid = request.cookies.get("sc_clid")
+        
         # GA4 cookies
         ga_client_id = None
         ga_session_id = None
@@ -866,6 +940,8 @@ async def skip_trial_and_subscribe(
             ttclid=ttclid,
             ga_client_id=ga_client_id,
             ga_session_id=ga_session_id,
+            sc_cookie1=sc_cookie1,
+            sc_clid=sc_clid,
         )
         
         logger.info(f"Created skip-trial checkout for user {current_user.id}, plan {actual_plan_name}")

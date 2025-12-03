@@ -115,6 +115,25 @@ export default function RootLayout({
         />
         {/* End TikTok Pixel Code */}
         
+        {/* Snap Pixel Code */}
+        <Script
+          id="snapchat-pixel"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(e,t,n){if(e.snaptr)return;var a=e.snaptr=function()
+              {a.handleRequest?a.handleRequest.apply(a,arguments):a.queue.push(arguments)};
+              a.queue=[];var s='script';r=t.createElement(s);r.async=!0;
+              r.src=n;var u=t.getElementsByTagName(s)[0];
+              u.parentNode.insertBefore(r,u);})(window,document,
+              'https://sc-static.net/scevent.min.js');
+              snaptr('init', '5bf81ee1-15b1-4dc1-b636-d7dae49b950e', {});
+              snaptr('track', 'PAGE_VIEW');
+            `,
+          }}
+        />
+        {/* End Snap Pixel Code */}
+        
         <AuthProvider>
           <Timer />
           <Header></Header>

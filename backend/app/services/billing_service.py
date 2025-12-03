@@ -35,6 +35,8 @@ class BillingService:
         wbraid: Optional[str] = None,
         ga_client_id: Optional[str] = None,
         ga_session_id: Optional[str] = None,
+        sc_cookie1: Optional[str] = None,
+        sc_clid: Optional[str] = None,
         **extra_metadata
     ) -> dict:
         """Build checkout session metadata with tracking context for Purchase events."""
@@ -74,6 +76,12 @@ class BillingService:
         if ga_session_id:
             metadata["ga_session_id"] = ga_session_id
         
+        # Snap cookies
+        if sc_cookie1:
+            metadata["sc_cookie1"] = sc_cookie1
+        if sc_clid:
+            metadata["sc_clid"] = sc_clid
+        
         # Add any extra metadata (e.g., is_upgrade, existing_subscription_id)
         metadata.update(extra_metadata)
         
@@ -94,7 +102,9 @@ class BillingService:
         gbraid: Optional[str] = None,
         wbraid: Optional[str] = None,
         ga_client_id: Optional[str] = None,
-        ga_session_id: Optional[str] = None
+        ga_session_id: Optional[str] = None,
+        sc_cookie1: Optional[str] = None,
+        sc_clid: Optional[str] = None
     ) -> str:
         """Create Stripe checkout session for a subscription plan or upgrade existing subscription."""
         import logging
@@ -325,7 +335,9 @@ class BillingService:
                 "gbraid": gbraid or "",
                 "wbraid": wbraid or "",
                 "ga_client_id": ga_client_id or "",
-                "ga_session_id": ga_session_id or ""
+                "ga_session_id": ga_session_id or "",
+                "sc_cookie1": sc_cookie1 or "",
+                "sc_clid": sc_clid or ""
             }
         }
         
@@ -357,6 +369,8 @@ class BillingService:
                 wbraid=wbraid,
                 ga_client_id=ga_client_id,
                 ga_session_id=ga_session_id,
+                sc_cookie1=sc_cookie1,
+                sc_clid=sc_clid,
             ),
             "subscription_data": subscription_data,
         }
@@ -626,101 +640,118 @@ class BillingService:
                         logger.info(f"🏁 [TRIAL TRACKING] Value: ${value} {currency}")
                         
                         # Initialize services if not already done
-                        from app.services.facebook_conversions import FacebookConversionsService
-                        from app.services.tiktok_conversions import TikTokConversionsService
-                        from app.services.ga4_service import GA4Service
+                    from app.services.facebook_conversions import FacebookConversionsService
+                    from app.services.tiktok_conversions import TikTokConversionsService
+                    from app.services.snap_conversions import SnapConversionsService
+                    from app.services.ga4_service import GA4Service
+                    
+                    conversions_service = FacebookConversionsService()
+                    tiktok_service = TikTokConversionsService()
+                    snap_service = SnapConversionsService()
+                    ga4_service = GA4Service()
                         
-                        conversions_service = FacebookConversionsService()
-                        tiktok_service = TikTokConversionsService()
-                        ga4_service = GA4Service()
+                    import asyncio
+                    # Facebook StartTrial
+                    # Check if conversions_service has track_event (it might be missing in some versions)
+                    if hasattr(conversions_service, 'track_event'):
+                        # Use a unique event_id for StartTrial deduplication
+                        event_id_dedup = f"start_trial_{session.get('id')}"
                         
-                        import asyncio
-                        # Facebook StartTrial
-                        # Check if conversions_service has track_event (it might be missing in some versions)
-                        if hasattr(conversions_service, 'track_event'):
-                            # Use a unique event_id for StartTrial deduplication
-                            event_id_dedup = f"start_trial_{session.get('id')}"
-                            
-                            asyncio.create_task(conversions_service.track_event(
-                                event_name="StartTrial",
-                                event_time=int(time.time()),
-                                user_data={
-                                    "em": [user.email],
-                                    "fn": [first_name] if first_name else None,
-                                    "ln": [last_name] if last_name else None,
-                                    "client_ip_address": client_ip,
-                                    "client_user_agent": client_user_agent,
-                                    "fbp": fbp,
-                                    "fbc": fbc,
-                                    "external_id": str(user.id)
-                                },
-                                custom_data={
-                                    "value": value,
-                                    "currency": currency,
-                                    "predicted_ltv": 0.0,
-                                    "content_name": "Trial Subscription",
-                                    "status": "trialing"
-                                },
-                                event_source_url=f"{settings.FRONTEND_URL}/",
-                                event_id=event_id_dedup
-                            ))
-                        elif hasattr(conversions_service, 'track_start_trial'):
-                             # Fallback to specific method if generic one is missing
-                             asyncio.create_task(conversions_service.track_start_trial(
-                                value=value,
-                                currency=currency,
-                                email=user.email,
-                                first_name=first_name,
-                                last_name=last_name,
-                                external_id=str(user.id),
-                                client_ip=client_ip,
-                                client_user_agent=client_user_agent,
-                                fbp=fbp,
-                                fbc=fbc,
-                                event_source_url=f"{settings.FRONTEND_URL}/",
-                                event_id=session.get("id"),
-                                content_name="Trial Subscription"
-                            ))
-                        else:
-                            logger.error("❌ [TRIAL TRACKING] FacebookConversionsService missing track_event or track_start_trial method")
+                        asyncio.create_task(conversions_service.track_event(
+                            event_name="StartTrial",
+                            event_time=int(time.time()),
+                            user_data={
+                                "em": [user.email],
+                                "fn": [first_name] if first_name else None,
+                                "ln": [last_name] if last_name else None,
+                                "client_ip_address": client_ip,
+                                "client_user_agent": client_user_agent,
+                                "fbp": fbp,
+                                "fbc": fbc,
+                                "external_id": str(user.id)
+                            },
+                            custom_data={
+                                "value": value,
+                                "currency": currency,
+                                "predicted_ltv": 0.0,
+                                "content_name": "Trial Subscription",
+                                "status": "trialing"
+                            },
+                            event_source_url=f"{settings.FRONTEND_URL}/",
+                            event_id=event_id_dedup
+                        ))
+                    elif hasattr(conversions_service, 'track_start_trial'):
+                         # Fallback to specific method if generic one is missing
+                         asyncio.create_task(conversions_service.track_start_trial(
+                            value=value,
+                            currency=currency,
+                            email=user.email,
+                            first_name=first_name,
+                            last_name=last_name,
+                            external_id=str(user.id),
+                            client_ip=client_ip,
+                            client_user_agent=client_user_agent,
+                            fbp=fbp,
+                            fbc=fbc,
+                            event_source_url=f"{settings.FRONTEND_URL}/",
+                            event_id=session.get("id"),
+                            content_name="Trial Subscription"
+                        ))
+                    else:
+                        logger.error("❌ [TRIAL TRACKING] FacebookConversionsService missing track_event or track_start_trial method")
+                    
+                    # TikTok StartTrial
+                    # Check if user has ttp or ttclid to avoid sending empty event if possible
+                    if ttp or ttclid:
+                        # Use event_id to deduplicate if called multiple times
+                        event_id_dedup = f"start_trial_{session.get('id')}"
                         
-                        # TikTok StartTrial
-                        # Check if user has ttp or ttclid to avoid sending empty event if possible
-                        if ttp or ttclid:
-                            # Use event_id to deduplicate if called multiple times
-                            event_id_dedup = f"start_trial_{session.get('id')}"
-                            
-                            asyncio.create_task(tiktok_service.track_start_trial(
-                                value=value,
-                                currency=currency,
-                                email=user.email,
-                                external_id=str(user.id),
-                                client_ip=client_ip,
-                                client_user_agent=client_user_agent,
-                                event_source_url=f"{settings.FRONTEND_URL}/",
-                                event_id=event_id_dedup,
-                                ttp=ttp,
-                                ttclid=ttclid,
-                            ))
-                        else:
-                            logger.info("⚠️ [TRIAL TRACKING] Skipping TikTok StartTrial - no TTP/TTCLID found")
-                        
-                        # GA4 StartTrial
-                        if ga_client_id:
-                            asyncio.create_task(ga4_service.track_start_trial(
-                                client_id=ga_client_id,
-                                value=value,
-                                currency=currency,
-                                user_id=str(user.id),
-                                session_id=ga_session_id,
-                                client_ip=client_ip,
-                                user_agent=client_user_agent,
-                                page_location=f"{settings.FRONTEND_URL}/",
-                                items=[{"item_name": "Trial Subscription", "price": value, "quantity": 1}]
-                            ))
-                        
-                        logger.info(f"✅ [TRIAL TRACKING] StartTrial event triggered successfully for FB, TikTok, and GA4")
-                        logger.info("=" * 80)
+                        asyncio.create_task(tiktok_service.track_start_trial(
+                            value=value,
+                            currency=currency,
+                            email=user.email,
+                            external_id=str(user.id),
+                            client_ip=client_ip,
+                            client_user_agent=client_user_agent,
+                            event_source_url=f"{settings.FRONTEND_URL}/",
+                            event_id=event_id_dedup,
+                            ttp=ttp,
+                            ttclid=ttclid,
+                        ))
+                    else:
+                        logger.info("⚠️ [TRIAL TRACKING] Skipping TikTok StartTrial - no TTP/TTCLID found")
+                    
+                    # Snap StartTrial
+                    asyncio.create_task(snap_service.track_start_trial(
+                        price=value,
+                        currency=currency,
+                        transaction_id=f"start_trial_{session.get('id')}",
+                        email=user.email,
+                        client_ip=client_ip,
+                        client_user_agent=client_user_agent,
+                        page_url=f"{settings.FRONTEND_URL}/",
+                        sc_cookie1=sc_cookie1,
+                        sc_clid=sc_clid,
+                        item_ids=[plan_name],
+                        external_id=str(user.id),
+                    ))
+
+                    # GA4 StartTrial
+                    if ga_client_id:
+                        asyncio.create_task(ga4_service.track_start_trial(
+                            client_id=ga_client_id,
+                            value=value,
+                            currency=currency,
+                            user_id=str(user.id),
+                            session_id=ga_session_id,
+                            client_ip=client_ip,
+                            user_agent=client_user_agent,
+                            page_location=f"{settings.FRONTEND_URL}/",
+                            items=[{"item_name": "Trial Subscription", "price": value, "quantity": 1}]
+                        ))
+                    
+                    logger.info(f"✅ [TRIAL TRACKING] StartTrial event triggered successfully for FB, TikTok, and GA4")
+                    logger.info("=" * 80)
                 
                 except Exception as e:
                     logger.error(f"❌ [TRIAL TRACKING] Failed to track StartTrial event: {str(e)}", exc_info=True)
@@ -823,6 +854,10 @@ class BillingService:
                             first_name = name_parts[0] if name_parts else None
                             last_name = name_parts[1] if len(name_parts) > 1 else None
                         
+                        # Extract Snap cookies from metadata/user profile
+                        sc_cookie1 = metadata.get("sc_cookie1") or user.last_checkout_sc_cookie1
+                        sc_clid = metadata.get("sc_clid") or user.last_checkout_sc_clid
+                        
                         logger.info(f"💰 [PURCHASE TRACKING] User: {user.email} (ID: {user.id})")
                         logger.info(f"💰 [PURCHASE TRACKING] Name: {first_name} {last_name}" if first_name else "💰 [PURCHASE TRACKING] Name: Not available")
                         logger.info(f"💰 [PURCHASE TRACKING] Plan: {plan_name}")
@@ -832,10 +867,12 @@ class BillingService:
                         logger.info(f"💰 [PURCHASE TRACKING] Tracking Context: IP={client_ip}, UA={client_user_agent[:50] if client_user_agent else 'None'}...")
                         logger.info(f"💰 [PURCHASE TRACKING] Facebook Cookies: fbp={fbp}, fbc={fbc}")
                         logger.info(f"💰 [PURCHASE TRACKING] TikTok Cookies: ttp={ttp}, ttclid={ttclid}")
+                        logger.info(f"💰 [PURCHASE TRACKING] Snap Cookies: sc_cookie1={sc_cookie1}, sc_clid={sc_clid}")
                         logger.info(f"💰 [PURCHASE TRACKING] GA4: client_id={ga_client_id}, session_id={ga_session_id}")
                         
                         conversions_service = FacebookConversionsService()
                         tiktok_service = TikTokConversionsService()
+                        snap_service = SnapConversionsService()
                         ga4_service = GA4Service()
                         
                         # Track purchase (fire and forget - don't block response)
@@ -867,6 +904,21 @@ class BillingService:
                             event_id=event_id,
                             ttp=ttp,
                             ttclid=ttclid,
+                        ))
+                        # Snap tracking
+                        asyncio.create_task(snap_service.track_purchase(
+                            price=value,
+                            currency=currency,
+                            transaction_id=event_id,
+                            email=user.email,
+                            client_ip=client_ip,
+                            client_user_agent=client_user_agent,
+                            page_url=f"{settings.FRONTEND_URL}/",
+                            sc_cookie1=sc_cookie1,
+                            sc_clid=sc_clid,
+                            item_ids=[plan_name],
+                            number_items=1,
+                            external_id=str(user.id),
                         ))
                         # GA4 tracking
                         if ga_client_id:
@@ -1290,6 +1342,8 @@ class BillingService:
                                 if metadata.get("client_user_agent"): client_user_agent = metadata.get("client_user_agent")
                                 if metadata.get("ga_client_id"): ga_client_id = metadata.get("ga_client_id")
                                 if metadata.get("ga_session_id"): ga_session_id = metadata.get("ga_session_id")
+                                if metadata.get("sc_cookie1"): sc_cookie1 = metadata.get("sc_cookie1")
+                                if metadata.get("sc_clid"): sc_clid = metadata.get("sc_clid")
                             except Exception as e:
                                 logger.warning(f"Could not retrieve subscription metadata for attribution: {e}")
                             
@@ -1308,6 +1362,7 @@ class BillingService:
                             
                             fb_service = FacebookConversionsService()
                             tiktok_service = TikTokConversionsService()
+                            snap_service = SnapConversionsService()
                             ga4_service = GA4Service()
                             
                             import asyncio
@@ -1339,6 +1394,22 @@ class BillingService:
                                 event_id=event_id,
                                 ttp=ttp,
                                 ttclid=ttclid,
+                            ))
+
+                            # Snap Purchase
+                            asyncio.create_task(snap_service.track_purchase(
+                                price=value,
+                                currency=currency,
+                                transaction_id=event_id,
+                                email=user.email,
+                                client_ip=client_ip,
+                                client_user_agent=client_user_agent,
+                                page_url=f"{settings.FRONTEND_URL}/",
+                                sc_cookie1=sc_cookie1,
+                                sc_clid=sc_clid,
+                                item_ids=[plan.name],
+                                number_items=1,
+                                external_id=str(user.id),
                             ))
 
                             # GA4 Purchase

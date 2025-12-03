@@ -99,6 +99,10 @@ class Settings(BaseSettings):
     TIKTOK_PIXEL_ID: Optional[str] = None  # TikTok Pixel ID (e.g., "D4JVLBBC77U4IAHDMKB0")
     TIKTOK_ACCESS_TOKEN: Optional[str] = None  # TikTok Events API Access Token
 
+    # Snap Conversions API
+    SNAP_PIXEL_ID: Optional[str] = None  # Snap Pixel ID
+    SNAP_ACCESS_TOKEN: Optional[str] = None  # Snap Conversions API Access Token
+
     # GA4 Measurement Protocol
     GA4_MEASUREMENT_ID: Optional[str] = None  # GA4 Measurement ID (e.g., "G-XXXXXXXXXX")
     GA4_API_SECRET: Optional[str] = None  # GA4 Measurement Protocol API Secret

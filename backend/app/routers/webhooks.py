@@ -123,8 +123,14 @@ async def supabase_auth_webhook(
                     # Use stored tracking context from signup
                     try:
                         from app.services.facebook_conversions import FacebookConversionsService
+                        from app.services.tiktok_conversions import TikTokConversionsService
+                        from app.services.snap_conversions import SnapConversionsService
+                        from app.services.ga4_service import GA4Service
                         
                         conversions_service = FacebookConversionsService()
+                        tiktok_service = TikTokConversionsService()
+                        snap_service = SnapConversionsService()
+                        ga4_service = GA4Service()
                         
                         # Extract first and last name from display_name
                         first_name = None
@@ -141,6 +147,7 @@ async def supabase_auth_webhook(
                         logger.info(f"   Using stored context: IP={user_profile.signup_ip}, UA={user_profile.signup_user_agent[:50] if user_profile.signup_user_agent else None}")
                         
                         # Fire CompleteRegistration event using stored tracking context (fire and forget)
+                        # Facebook tracking
                         asyncio.create_task(conversions_service.track_complete_registration(
                             email=user_profile.email,
                             first_name=first_name,
@@ -154,7 +161,43 @@ async def supabase_auth_webhook(
                             event_id=event_id,
                         ))
                         
-                        logger.info(f"✅ CompleteRegistration event triggered for {user_profile.email}")
+                        # TikTok tracking
+                        asyncio.create_task(tiktok_service.track_complete_registration(
+                            email=user_profile.email,
+                            external_id=str(user_profile.id),
+                            client_ip=user_profile.signup_ip,
+                            client_user_agent=user_profile.signup_user_agent,
+                            event_source_url=f"{settings.FRONTEND_URL}/",
+                            event_id=event_id,
+                            ttp=user_profile.signup_ttp,
+                            ttclid=user_profile.signup_ttclid,
+                        ))
+
+                        # Snap tracking
+                        asyncio.create_task(snap_service.track_complete_registration(
+                            email=user_profile.email,
+                            client_ip=user_profile.signup_ip,
+                            client_user_agent=user_profile.signup_user_agent,
+                            page_url=f"{settings.FRONTEND_URL}/",
+                            sc_cookie1=user_profile.signup_sc_cookie1,
+                            sc_clid=user_profile.signup_sc_clid,
+                            event_id=event_id,
+                            external_id=str(user_profile.id),
+                        ))
+                        
+                        # GA4 tracking
+                        if user_profile.signup_ga_client_id:
+                            asyncio.create_task(ga4_service.track_sign_up(
+                                client_id=user_profile.signup_ga_client_id,
+                                user_id=str(user_profile.id),
+                                session_id=user_profile.signup_ga_session_id,
+                                client_ip=user_profile.signup_ip,
+                                user_agent=user_profile.signup_user_agent,
+                                page_location=f"{settings.FRONTEND_URL}/",
+                                method="email"
+                            ))
+                        
+                        logger.info(f"✅ CompleteRegistration event triggered for {user_profile.email} (FB, TikTok, Snap, GA4)")
                     except Exception as e:
                         logger.error(f"Failed to track CompleteRegistration for verified user {user_id}: {str(e)}")
                 else:
