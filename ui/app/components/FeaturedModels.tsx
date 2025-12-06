@@ -66,7 +66,7 @@ export default function FeaturedModels() {
   return (
     <section className="py-12">
       <div className="max-w-[1320px] px-5 mx-auto">
-        <h2 className="text-4xl md:text-5xl lg:text-6xl font-medium text-[#cefb16] mb-6 uppercase">FEATURED AI MODELS</h2>
+        <h2 className="text-4xl md:text-5xl lg:text-6xl font-medium text-[#cefb16] mb-6 uppercase">BUILD YOUR OWN AI AGENT</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {models.map((model) => (

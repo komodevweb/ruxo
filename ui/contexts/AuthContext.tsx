@@ -34,6 +34,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  // Capture ad Click IDs from URL on every page load
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    try {
+      const params = new URLSearchParams(window.location.search);
+      
+      // Capture Snap Click ID
+      const scCid = params.get('ScCid') || params.get('sccid');
+      if (scCid) {
+        document.cookie = `sc_clid=${scCid}; path=/; max-age=2592000; SameSite=Lax`;
+        console.log('🎯 [SNAP] Captured Click ID from URL:', scCid);
+      }
+      
+      // Capture Facebook Click ID (backup to Pixel)
+      const fbclid = params.get('fbclid');
+      if (fbclid) {
+        const fbcValue = `fb.1.${Date.now()}.${fbclid}`;
+        document.cookie = `_fbc=${fbcValue}; path=/; max-age=2592000; SameSite=Lax`;
+        console.log('🎯 [FB] Captured Click ID from URL:', fbclid);
+      }
+      
+      // Capture Google Click IDs
+      const gclid = params.get('gclid');
+      if (gclid) {
+        document.cookie = `gclid=${gclid}; path=/; max-age=2592000; SameSite=Lax`;
+        console.log('🎯 [GOOGLE] Captured Click ID from URL:', gclid);
+      }
+    } catch (error) {
+      console.error('[Click ID Capture] Error:', error);
+    }
+  }, []); // Run once on mount
+
   useEffect(() => {
     // Only run on client side
     if (typeof window === 'undefined') return;
@@ -124,11 +157,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
           
-          // Also check URL params for gclid/gbraid/wbraid if not in cookies
+          // Also check URL params for gclid/gbraid/wbraid/ScCid if not in cookies
           const params = new URLSearchParams(window.location.search);
           if (!gclidCookie) gclidCookie = params.get('gclid');
           if (!gbraidCookie) gbraidCookie = params.get('gbraid');
           if (!wbraidCookie) wbraidCookie = params.get('wbraid');
+          
+          // Capture Snap Click ID
+          const scCid = params.get('ScCid') || params.get('sccid');
+          if (scCid) {
+            // Store in cookie for 30 days
+            document.cookie = `sc_clid=${scCid}; path=/; max-age=2592000; SameSite=Lax`;
+            console.log('🎯 Captured Snap Click ID:', scCid);
+          }
+          
+          // Capture Facebook Click ID (if not automatically handled by Pixel)
+          const fbclid = params.get('fbclid');
+          if (fbclid) {
+            // Facebook pixel usually handles this, but good as backup
+            const fbcValue = `fb.1.${Date.now()}.${fbclid}`;
+            document.cookie = `_fbc=${fbcValue}; path=/; max-age=2592000; SameSite=Lax`;
+          }
           
         } catch (e) {
           console.warn('[OAUTH FRONTEND] Could not read cookies:', e);
@@ -749,11 +798,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
         
-        // Also check URL params for gclid/gbraid/wbraid
+        // Also check URL params for gclid/gbraid/wbraid/ScCid
         const params = new URLSearchParams(window.location.search);
         if (!gclid) gclid = params.get('gclid');
         if (!gbraid) gbraid = params.get('gbraid');
         if (!wbraid) wbraid = params.get('wbraid');
+        
+        // Capture Snap Click ID
+        const scCid = params.get('ScCid') || params.get('sccid');
+        if (scCid) {
+          // Store in cookie for 30 days
+          document.cookie = `sc_clid=${scCid}; path=/; max-age=2592000; SameSite=Lax`;
+          console.log('🎯 Captured Snap Click ID:', scCid);
+        }
+        
+        // Capture Facebook Click ID (if not automatically handled by Pixel)
+        const fbclid = params.get('fbclid');
+        if (fbclid) {
+          // Facebook pixel usually handles this, but good as backup
+          const fbcValue = `fb.1.${Date.now()}.${fbclid}`;
+          document.cookie = `_fbc=${fbcValue}; path=/; max-age=2592000; SameSite=Lax`;
+        }
         
         // Capture user agent (synchronous)
         const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : null;

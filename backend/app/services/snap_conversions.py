@@ -51,16 +51,24 @@ snap_conversions_logger.addHandler(file_handler)
 snap_conversions_logger.propagate = False
 
 class SnapConversionsService:
-    """Service for sending events to Snap Conversions API v3."""
+    """Service for sending events to Snap Conversions API v2.
+    
+    Note: Canvas JWT tokens work with v2 API but NOT v3 API.
+    v2 is the working version for our token type.
+    """
     
     def __init__(self):
         self.pixel_id = settings.SNAP_PIXEL_ID
         self.access_token = settings.SNAP_ACCESS_TOKEN
-        # v3 API format: https://tr.snapchat.com/v3/{pixel_id}/events?access_token={token}
+        # Snap Conversions API v2 endpoint
+        # Authentication: Bearer token in Authorization header
+        # Note: Canvas JWT tokens work with v2, but get 401 with v3
         if self.pixel_id and self.access_token:
-            self.api_url = f"https://tr.snapchat.com/v3/{self.pixel_id}/events?access_token={self.access_token}"
+            self.api_url = "https://tr.snapchat.com/v2/conversion"
+            self.validate_url = "https://tr.snapchat.com/v2/conversion/validate"
         else:
             self.api_url = None
+            self.validate_url = None
         
         if not self.pixel_id or not self.access_token:
             logger.warning("Snap Conversions API not configured. Pixel ID and Access Token required.")
@@ -92,31 +100,28 @@ class SnapConversionsService:
         external_id: Optional[str] = None,
     ) -> bool:
         """
-        Send a conversion event to Snap Conversions API v3.
-        Format: POST https://tr.snapchat.com/v3/{pixel_id}/events?access_token={token}
+        Send a conversion event to Snap Conversions API v2.
+        Format: POST https://tr.snapchat.com/v2/conversion
+        Authentication: Bearer token in Authorization header
         
-        Payload structure:
+        v2 Payload structure (flat) with ALL matching parameters:
         {
-          "data": [{
-            "event_name": "PURCHASE",
-            "action_source": "website",
-            "event_source_url": "https://example.com",
-            "event_time": 1234567890,
-            "user_data": {
-              "em": ["hashed_email"],
-              "ph": ["hashed_phone"],
-              "user_agent": "...",
-              "client_ip_address": "...",
-              "sc_click_id": "...",
-              "sc_cookie1": "..."
-            },
-            "custom_data": {
-              "event_id": "...",
-              "value": "...",
-              "currency": "...",
-              "content_ids": ["..."]
-            }
-          }]
+          "pixel_id": "...",
+          "timestamp": "1234567890123",
+          "event_type": "PURCHASE",
+          "event_conversion_type": "WEB",
+          "hashed_email": "...",           // SHA-256 hashed
+          "hashed_phone_number": "...",    // SHA-256 hashed
+          "hashed_ip_address": "...",      // SHA-256 hashed (v2 specific)
+          "user_agent": "...",             // NOT hashed
+          "uuid_c1": "...",                // Snap cookie, NOT hashed
+          "click_id": "...",               // Snap Click ID, NOT hashed
+          "client_dedup_id": "...",        // User ID, NOT hashed
+          "page_url": "https://example.com",
+          "price": "99.99",                // String
+          "currency": "USD",
+          "item_ids": "product1,product2", // Comma-separated
+          "transaction_id": "..."
         }
         """
         if not self.pixel_id or not self.access_token or not self.api_url:
@@ -125,98 +130,110 @@ class SnapConversionsService:
             
         try:
             if event_time is None:
-                # Snap v3 expects milliseconds (not seconds!)
+                # v2 expects milliseconds as string
                 event_time = int(time.time() * 1000)
             
-            # Build user_data object
-            user_data_obj = {}
-            
-            if email:
-                user_data_obj["em"] = [self._hash_value(email)]
-            if phone:
-                user_data_obj["ph"] = [self._hash_value(phone)]
-            if client_user_agent:
-                user_data_obj["user_agent"] = client_user_agent
-            if client_ip:
-                user_data_obj["client_ip_address"] = client_ip
-            if sc_cookie1:
-                user_data_obj["cookie1"] = sc_cookie1  # v3 uses "cookie1" not "sc_cookie1"
-            if sc_click_id:
-                user_data_obj["click_id"] = sc_click_id  # v3 uses "click_id" not "sc_click_id"
-            if external_id:
-                user_data_obj["external_id"] = [external_id]  # User ID in array format
-            
-            # Build custom_data object
-            custom_data_obj = {}
-            
-            if value is not None:
-                custom_data_obj["value"] = float(value)  # v3 expects number, not string
-            if currency:
-                custom_data_obj["currency"] = currency
-            if content_ids:
-                custom_data_obj["content_ids"] = content_ids
-            if content_category:
-                custom_data_obj["content_category"] = content_category
-            if number_items:
-                custom_data_obj["number_items"] = number_items
-            
-            # Build event object
-            event_data = {
-                "event_name": event_name,
-                "action_source": "WEB",  # v3 uses "WEB" not "website"
-                "event_time": event_time,  # Milliseconds
-            }
-            
-            # Add event_id to event object (not custom_data for v3)
-            if event_id:
-                event_data["event_id"] = event_id
-            
-            if event_source_url:
-                event_data["event_source_url"] = event_source_url
-            
-            # Add user_data if not empty
-            if user_data_obj:
-                event_data["user_data"] = user_data_obj
-            
-            # Add custom_data if not empty
-            if custom_data_obj:
-                event_data["custom_data"] = custom_data_obj
-
-            # v3 API expects { "data": [array of events] }
+            # Build v2 payload (flat structure) with ALL matching parameters
             payload = {
-                "data": [event_data]
+                "pixel_id": self.pixel_id,
+                "timestamp": str(event_time),
+                "event_type": event_name,
+                "event_conversion_type": "WEB",
             }
-
+            
+            # User Matching Parameters (send as many as possible for best matching)
+            
+            # Email - hashed (CRITICAL for matching)
+            if email:
+                payload["hashed_email"] = self._hash_value(email)
+            
+            # Phone - hashed (CRITICAL for matching)
+            if phone:
+                payload["hashed_phone_number"] = self._hash_value(phone)
+            
+            # IP Address - hashed in v2 (NOT hashed in v3)
+            if client_ip:
+                payload["hashed_ip_address"] = self._hash_value(client_ip)
+            
+            # User Agent - NOT hashed (device/browser info)
+            if client_user_agent:
+                payload["user_agent"] = client_user_agent
+            
+            # Snap Cookie - NOT hashed (RECOMMENDED for better matching)
+            if sc_cookie1:
+                payload["uuid_c1"] = sc_cookie1
+            
+            # Click ID - NOT hashed (CRITICAL for ad attribution!)
+            if sc_click_id:
+                payload["click_id"] = sc_click_id
+            
+            # External ID - NOT hashed (user deduplication)
+            if external_id:
+                payload["client_dedup_id"] = external_id
+            
+            # Event URL
+            if event_source_url:
+                payload["page_url"] = event_source_url
+            
+            # Commerce Parameters
+            if value is not None:
+                payload["price"] = str(value)
+            
+            if currency:
+                payload["currency"] = currency
+            
+            # Item IDs - comma-separated string in v2
+            if content_ids:
+                payload["item_ids"] = ",".join(content_ids)
+            
+            # Item Category - single value in v2
+            if content_category and len(content_category) > 0:
+                payload["item_category"] = content_category[0]
+            
+            # Number of Items - single value as string in v2
+            if number_items:
+                # Handle both list and integer
+                if isinstance(number_items, list) and len(number_items) > 0:
+                    payload["number_items"] = str(number_items[0])
+                elif isinstance(number_items, int):
+                    payload["number_items"] = str(number_items)
+            
+            # Transaction ID for deduplication
+            if event_id:
+                payload["transaction_id"] = event_id
+            
             # Prepare for logging
             payload_for_logging = payload.copy()
             
             # Log concise
-            logger.info(f"[OUT] Sending {event_name} event to Snap Conversions API v3")
+            logger.info(f"[OUT] Sending {event_name} event to Snap Conversions API v2")
             
             # Log detailed
             snap_conversions_logger.info("=" * 100)
-            snap_conversions_logger.info(f"[OUT] OUTGOING REQUEST - {event_name} Event (v3)")
+            snap_conversions_logger.info(f"[OUT] OUTGOING REQUEST - {event_name} Event (v2)")
             snap_conversions_logger.info(f"URL: {self.api_url}")
             snap_conversions_logger.info(f"Method: POST")
             snap_conversions_logger.info(f"Payload:")
             snap_conversions_logger.info(json.dumps(payload_for_logging, indent=2))
             snap_conversions_logger.info("=" * 100)
             
+            # Authentication: Bearer token in Authorization header (OAuth 2.0 standard)
             headers = {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.access_token}"
             }
             
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(self.api_url, json=payload, headers=headers)
                 
-                # v3 may return different response format
+                # Parse response
                 try:
                     result = response.json()
                 except:
                     result = {"status": "UNKNOWN", "text": response.text}
                 
                 # Log response
-                logger.info(f"[IN] Snap response: {response.status_code}")
+                logger.info(f"[IN] Snap v2 response: {response.status_code}")
                 
                 snap_conversions_logger.info("=" * 100)
                 snap_conversions_logger.info(f"[IN] INCOMING RESPONSE - {event_name} Event")
@@ -225,16 +242,16 @@ class SnapConversionsService:
                 snap_conversions_logger.info("=" * 100)
                 snap_conversions_logger.info("")
 
-                # v3 returns 200 for success
+                # v2 returns 200 for success with status "SUCCESS"
                 if response.status_code == 200:
-                    logger.info(f"[SUCCESS] {event_name} event successfully sent to Snap v3")
+                    logger.info(f"[SUCCESS] {event_name} event successfully sent to Snap v2")
                     return True
                 else:
-                    logger.error(f"[ERROR] Snap API v3 returned {response.status_code}: {result}")
+                    logger.error(f"[ERROR] Snap API v2 returned {response.status_code}: {result}")
                     return False
 
         except Exception as e:
-            logger.error(f"Error sending Snap Conversions API v3 event: {str(e)}", exc_info=True)
+            logger.error(f"Error sending Snap Conversions API v2 event: {str(e)}", exc_info=True)
             return False
 
     async def track_complete_registration(

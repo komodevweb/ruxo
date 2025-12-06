@@ -41,31 +41,31 @@ export default function HomepageCards() {
       <CardFeature
         image={cardImages[0]}
         icon="/images/user-icon.svg"
-        title="Image to Video"
-        description="Transform your images into dynamic videos with lifelike motion and effects."
-        link="/image-to-video"
+        title="Create your own AI Actor"
+        description="Customize visuals, audio, and actions to help you present. Create your very own avatar."
+        link="/create-actor"
       />
       <CardFeature
         image={cardImages[1]}
-        icon="/images/notepad-icon.svg"
-        title="Text to Video"
-        description="Turn your text into cinematic video scenes with smart visual storytelling."
-        link="/text-to-video"
+        icon="/images/play-icon.svg"
+        title="AI Video Editing"
+        description="Add subtitles, music, cuts and transitions in one click."
+        link="/video-editing"
       />
       <CardFeature
         image={cardImages[2]}
         icon="/images/Panorama.svg"
-        title="Text to Image"
-        description="Generate original images from text prompts using the latest AI models."
-        link="/image"
+        title="Emotion control"
+        description="You have full emotion control. Activates how you want it."
+        link="/emotion-control"
       />
       <div className="lg:col-start-2">
         <CardFeature
           image={cardImages[3]}
-          icon="/images/play-icon.svg"
-          title="Wan Animate"
-          description="Turn any image into motion with AI-powered animation."
-          link="/wan-animate"
+          icon="/images/notepad-icon.svg"
+          title="Location in every language"
+          description="Accurate translation in more than 30 languages. Reach the world."
+          link="/translation"
         />
       </div>
     </div>
